@@ -1,0 +1,1056 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Closetronic</title>
+
+<!-- ============================================================
+  CLOSETRONIC — prototype
+  Stack: HTML / CSS / vanilla JS / Firebase (Firestore)
+
+  SETUP REQUIRED BEFORE THIS WILL WORK:
+  1. Create a Firebase project at https://console.firebase.google.com
+  2. Enable Firestore, and enable Authentication > Anonymous sign-in.
+  3. Set Firestore rules to: allow read, write: if request.auth != null;
+  4. Open this file in a browser. On first load it will ask you to paste
+     your Firebase web app config (Project settings > your web app).
+     That config is saved in THIS BROWSER's local storage only — it is
+     never written into this file, so the file stays safe to commit to
+     a public repo. If you open the app in a different browser/device,
+     you'll be asked to paste the config again there.
+  5. Use the gear icon in the header any time to view/replace the saved
+     config for this browser.
+============================================================= -->
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+
+<style>
+  :root{
+    --ink:#1a1a1a;
+    --muted:#8a8a8a;
+    --line:#e8e8e8;
+    --bg:#ffffff;
+    --panel:#fafafa;
+    --accent:#1a1a1a;
+    --good:#2e7d32;
+    --bad:#c62828;
+    --radius:10px;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    background:var(--bg); color:var(--ink);
+  }
+  header{
+    padding:20px 20px 0; border-bottom:1px solid var(--line);
+  }
+  header h1{ font-size:20px; margin:0 0 14px; font-weight:600; letter-spacing:-0.2px; }
+  nav{ display:flex; gap:4px; overflow-x:auto; }
+  nav button{
+    background:none; border:none; padding:10px 14px; font-size:14px;
+    color:var(--muted); cursor:pointer; border-bottom:2px solid transparent;
+    white-space:nowrap;
+  }
+  nav button.active{ color:var(--ink); border-bottom-color:var(--ink); font-weight:600; }
+
+  main{ max-width:640px; margin:0 auto; padding:20px 20px 80px; }
+  .hidden{ display:none !important; }
+
+  .setup-progress{ display:flex; gap:10px; flex-wrap:wrap; margin-bottom:20px; }
+  .setup-chip{
+    font-size:13px; padding:6px 10px; border-radius:20px; background:var(--panel);
+    border:1px solid var(--line); color:var(--muted);
+  }
+  .setup-chip.done{ color:var(--good); border-color:var(--good); }
+
+  .locked-banner{
+    background:var(--panel); border:1px solid var(--line); border-radius:var(--radius);
+    padding:14px; font-size:14px; color:var(--muted); margin-bottom:20px;
+  }
+
+  .section-block{ margin-bottom:28px; }
+  .section-title{
+    display:flex; align-items:center; justify-content:space-between; margin-bottom:10px;
+  }
+  .section-title h2{ font-size:15px; margin:0; font-weight:600; text-transform:capitalize; }
+  .add-btn{
+    width:28px; height:28px; border-radius:50%; border:1px solid var(--ink);
+    background:none; font-size:16px; line-height:1; cursor:pointer;
+  }
+  .item-grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(84px,1fr)); gap:10px;
+  }
+  .item-card{
+    border:1px solid var(--line); border-radius:var(--radius); overflow:hidden; cursor:pointer;
+    position:relative; background:var(--panel);
+  }
+  .item-card img{ width:100%; aspect-ratio:1; object-fit:cover; display:block; }
+  .item-card .ph{ width:100%; aspect-ratio:1; display:flex; align-items:center; justify-content:center; color:var(--muted); font-size:11px; }
+  .swatch{ width:100%; aspect-ratio:1; display:block; }
+  .color-picker-row{ display:flex; align-items:center; gap:12px; }
+  .color-picker-row input[type=color]{ width:56px; height:56px; border:1px solid var(--line); border-radius:10px; padding:0; cursor:pointer; background:none; }
+  .color-preview{ flex:1; height:56px; border-radius:10px; border:1px solid var(--line); }
+  .swatch-strip{ display:flex; gap:6px; margin-top:10px; flex-wrap:wrap; }
+  .swatch-strip .sw{ width:26px; height:26px; border-radius:50%; border:1px solid var(--line); cursor:pointer; }
+  .item-card.unavailable{ opacity:0.35; }
+  .item-card .tag{
+    position:absolute; bottom:3px; left:3px; right:3px; font-size:10px; background:rgba(255,255,255,0.9);
+    padding:2px 4px; border-radius:4px; text-align:center; color:var(--muted);
+  }
+
+  /* Modal */
+  .overlay{
+    position:fixed; inset:0; background:rgba(0,0,0,0.4); display:flex; align-items:flex-end;
+    justify-content:center; z-index:50;
+  }
+  .modal{
+    background:#fff; width:100%; max-width:640px; border-radius:16px 16px 0 0;
+    padding:22px; max-height:88vh; overflow-y:auto;
+  }
+  @media(min-width:680px){
+    .overlay{ align-items:center; }
+    .modal{ border-radius:16px; }
+  }
+  .modal h3{ margin:0 0 16px; font-size:16px; }
+  label.field{ display:block; font-size:13px; color:var(--muted); margin:16px 0 6px; }
+  input[type=range]{ width:100%; }
+  .checkbox-row{ display:flex; align-items:center; gap:8px; margin-bottom:8px; font-size:14px; }
+  .toggle-row{ display:flex; gap:8px; }
+  .toggle-row button{
+    flex:1; padding:10px; border-radius:8px; border:1px solid var(--line); background:#fff; cursor:pointer;
+  }
+  .toggle-row button.selected{ background:var(--ink); color:#fff; border-color:var(--ink); }
+  .file-drop{
+    border:1px dashed var(--line); border-radius:var(--radius); padding:20px; text-align:center;
+    font-size:13px; color:var(--muted); cursor:pointer;
+  }
+  .file-drop img{ max-width:120px; max-height:120px; margin-top:10px; border-radius:8px; }
+  .modal-actions{ display:flex; gap:10px; margin-top:22px; }
+  .btn{ flex:1; padding:12px; border-radius:8px; border:1px solid var(--ink); background:#fff; cursor:pointer; font-size:14px; }
+  .btn.primary{ background:var(--ink); color:#fff; }
+  .btn.ghost{ border-color:var(--line); color:var(--muted); }
+
+  /* Quiz */
+  .quiz-pair{ display:flex; gap:14px; align-items:center; justify-content:center; margin:20px 0; }
+  .quiz-pair .piece{ width:90px; text-align:center; font-size:12px; color:var(--muted); }
+  .quiz-pair .piece img, .quiz-pair .piece .swatch{ width:90px; height:90px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+  .quiz-plus{ font-size:18px; color:var(--muted); }
+  .quiz-buttons{ display:flex; gap:16px; justify-content:center; margin-top:20px; }
+  .quiz-buttons button{
+    width:56px; height:56px; border-radius:50%; border:none; font-size:22px; cursor:pointer; color:#fff;
+  }
+  .quiz-buttons .no{ background:var(--bad); }
+  .quiz-buttons .yes{ background:var(--good); }
+  .quiz-progress{ text-align:center; font-size:12px; color:var(--muted); margin-top:6px; }
+
+  /* Daily */
+  .daily-card{
+    border:1px solid var(--line); border-radius:14px; padding:20px; text-align:center;
+  }
+  .daily-pieces{ display:flex; justify-content:center; gap:10px; margin:16px 0; flex-wrap:wrap; }
+  .daily-pieces img, .daily-pieces .swatch{ width:100px; height:100px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+  .daily-score{ font-size:12px; color:var(--muted); margin-bottom:10px; }
+  .no-outfit{ color:var(--muted); font-size:14px; padding:30px 0; text-align:center; }
+  .fallback-list .outfit-row{
+    display:flex; align-items:center; gap:10px; border:1px solid var(--line); border-radius:10px;
+    padding:10px; margin-bottom:8px; cursor:pointer;
+  }
+  .fallback-list img, .fallback-list .swatch{ width:44px; height:44px; object-fit:cover; border-radius:6px; }
+  .fallback-list .score{ margin-left:auto; font-size:12px; color:var(--muted); }
+
+  /* Availability */
+  .avail-actions{ display:flex; gap:10px; margin-bottom:16px; position:sticky; top:0; background:#fff; padding:6px 0; }
+  .avail-actions .btn{ flex:none; padding:8px 14px; font-size:13px; }
+  .item-card.selected{ outline:2px solid var(--ink); }
+
+  /* History */
+  .week-strip{ display:flex; gap:6px; margin-bottom:20px; }
+  .day-chip{
+    flex:1; text-align:center; border:1px solid var(--line); border-radius:8px; padding:8px 4px; cursor:pointer;
+  }
+  .day-chip .d{ font-size:11px; color:var(--muted); }
+  .day-chip img{ width:100%; aspect-ratio:1; object-fit:cover; border-radius:6px; margin-top:4px; }
+  .day-chip.empty{ color:var(--muted); font-size:11px; padding-top:20px; }
+
+  small.muted{ color:var(--muted); }
+  .config-warning{
+    background:#fff8e1; border:1px solid #f0dca0; border-radius:var(--radius); padding:14px;
+    font-size:13px; margin-bottom:20px;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Closetronic <button id="settingsBtn" title="Firebase settings" style="float:right;background:none;border:none;font-size:16px;cursor:pointer;">⚙</button></h1>
+  <nav id="nav">
+    <button data-tab="closet" class="active">Closet</button>
+    <button data-tab="daily">Today</button>
+    <button data-tab="availability">Availability</button>
+    <button data-tab="history">History</button>
+    <button data-tab="plan">Plan Week</button>
+  </nav>
+</header>
+
+<main>
+  <div id="configWarning" class="config-warning hidden">
+    Firebase isn't connected yet — tap the ⚙ icon above to paste in your project's config.
+  </div>
+
+  <!-- CLOSET TAB -->
+  <section id="tab-closet">
+    <div class="setup-progress" id="setupProgress"></div>
+    <div id="lockedBanner" class="locked-banner hidden">
+      Add at least 3 of each piece (hijab, top, bottom, shoes) before outfit generation unlocks.
+    </div>
+
+    <div class="section-block" data-cat="hijab">
+      <div class="section-title"><h2>Hijabs</h2><button class="add-btn" data-add="hijab">+</button></div>
+      <div class="item-grid" id="grid-hijab"></div>
+    </div>
+    <div class="section-block" data-cat="top">
+      <div class="section-title"><h2>Tops</h2><button class="add-btn" data-add="top">+</button></div>
+      <div class="item-grid" id="grid-top"></div>
+    </div>
+    <div class="section-block" data-cat="bottom">
+      <div class="section-title"><h2>Bottoms</h2><button class="add-btn" data-add="bottom">+</button></div>
+      <div class="item-grid" id="grid-bottom"></div>
+    </div>
+    <div class="section-block" data-cat="shoes">
+      <div class="section-title"><h2>Shoes</h2><button class="add-btn" data-add="shoes">+</button></div>
+      <div class="item-grid" id="grid-shoes"></div>
+    </div>
+  </section>
+
+  <!-- DAILY TAB -->
+  <section id="tab-daily" class="hidden">
+    <div class="toggle-row" style="margin-bottom:16px;">
+      <button id="rainNo" class="selected">Not raining</button>
+      <button id="rainYes">Raining today</button>
+    </div>
+    <div id="dailyContent"></div>
+  </section>
+
+  <!-- AVAILABILITY TAB -->
+  <section id="tab-availability" class="hidden">
+    <p><small class="muted">Tap items to select, like picking photos from a camera roll. Then mark selected as available or unavailable (laundry). Update this whenever — not tied to daily wear.</small></p>
+    <div class="avail-actions">
+      <button class="btn" id="markAvailable">Mark available</button>
+      <button class="btn ghost" id="markUnavailable">Mark unavailable</button>
+    </div>
+    <div id="availGrid"></div>
+  </section>
+
+  <!-- HISTORY TAB -->
+  <section id="tab-history" class="hidden">
+    <div class="week-strip" id="weekStrip"></div>
+    <div id="historyDetail"></div>
+  </section>
+
+  <!-- PLAN WEEK TAB -->
+  <section id="tab-plan" class="hidden">
+    <p><small class="muted">Pre-assign outfits to upcoming days. Pre-set days are skipped by the daily algorithm but still count toward this week's repeat rules.</small></p>
+    <div id="planStrip" class="week-strip"></div>
+    <div id="planPicker"></div>
+  </section>
+</main>
+
+<div id="modalRoot"></div>
+
+<script>
+/* ============================================================
+   1. FIREBASE CONFIG — entered by the user at runtime, stored in
+      THIS BROWSER's localStorage only. Never hardcoded here, so this
+      file is safe to commit to a public repo.
+============================================================= */
+const CONFIG_STORAGE_KEY = 'closetronic_firebase_config';
+let db = null;
+
+function getSavedConfig() {
+  try {
+    const raw = localStorage.getItem(CONFIG_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+
+function saveConfig(configObj) {
+  localStorage.setItem(CONFIG_STORAGE_KEY, JSON.stringify(configObj));
+}
+
+// Initializes Firebase with a given config, signs in anonymously, and
+// only THEN loads data — fixes the race condition where data fetches
+// were firing before the anonymous session existed, which made
+// Firestore silently deny the read (looked like "data gone").
+async function initFirebase(configObj) {
+  try {
+    if (firebase.apps.length) {
+      firebase.apps.forEach(a => a.delete());
+    }
+    firebase.initializeApp(configObj);
+    db = firebase.firestore();
+    await firebase.auth().signInAnonymously();
+    document.getElementById('configWarning').classList.add('hidden');
+    await loadAll();
+  } catch (e) {
+    console.error('Firebase init/auth failed', e);
+    db = null;
+    document.getElementById('configWarning').classList.remove('hidden');
+  }
+}
+
+function openSettingsModal() {
+  const existing = getSavedConfig();
+  const modalRoot = document.getElementById('modalRoot');
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <h3>Firebase config</h3>
+        <p style="font-size:13px;color:var(--muted);">
+          Paste the config object from your Firebase project
+          (Project settings → your web app → SDK setup and configuration).
+          This is saved only in this browser's local storage — it is never
+          written back into the HTML file.
+        </p>
+        <textarea id="configTextarea" rows="10" style="width:100%;font-family:monospace;font-size:12px;padding:10px;border:1px solid var(--line);border-radius:8px;">${existing ? JSON.stringify(existing, null, 2) : `{
+  "apiKey": "",
+  "authDomain": "",
+  "projectId": "",
+  "storageBucket": "",
+  "messagingSenderId": "",
+  "appId": ""
+}`}</textarea>
+        <div class="modal-actions">
+          <button class="btn ghost" id="closeSettings">Close</button>
+          <button class="btn primary" id="saveSettings">Save & connect</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeSettings').onclick = () => modalRoot.innerHTML = '';
+  document.getElementById('ov').addEventListener('click', e => { if (e.target.id === 'ov') modalRoot.innerHTML = ''; });
+  document.getElementById('saveSettings').onclick = async () => {
+    const rawInput = document.getElementById('configTextarea').value;
+    const parsed = parseFirebaseConfigInput(rawInput);
+    if (!parsed) {
+      alert('Couldn\'t read that as a config object — make sure you copied the whole { ... } block from Firebase\'s "SDK setup and configuration" page.');
+      return;
+    }
+    if (!parsed.apiKey || !parsed.projectId) {
+      alert('Config looks incomplete — make sure apiKey and projectId are filled in.');
+      return;
+    }
+    saveConfig(parsed);
+    modalRoot.innerHTML = '';
+    await initFirebase(parsed);
+    renderAll();
+  };
+}
+
+// Firebase's console shows the config as a raw JS object (unquoted keys),
+// usually embedded in a bigger snippet with "import { ... } from ..." lines
+// above it — those have their own curly braces, so we can't just grab
+// "first { to last }". Instead, walk through every "{" in the pasted text,
+// extract the balanced block starting there, and keep the first one that
+// evaluates to an object containing an apiKey field.
+function parseFirebaseConfigInput(rawInput) {
+  try {
+    const direct = JSON.parse(rawInput);
+    if (direct && direct.apiKey) return direct;
+  } catch (e) { /* fall through */ }
+
+  for (let i = 0; i < rawInput.length; i++) {
+    if (rawInput[i] !== '{') continue;
+    let depth = 0, end = -1;
+    for (let j = i; j < rawInput.length; j++) {
+      if (rawInput[j] === '{') depth++;
+      if (rawInput[j] === '}') { depth--; if (depth === 0) { end = j; break; } }
+    }
+    if (end === -1) continue;
+    const block = rawInput.slice(i, end + 1);
+    try {
+      // eslint-disable-next-line no-new-func
+      const obj = new Function('return (' + block + ')')();
+      if (obj && typeof obj === 'object' && obj.apiKey) return obj;
+    } catch (e) { /* try the next { and keep looking */ }
+  }
+  return null;
+}
+
+document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
+
+// On load: use saved config if present, otherwise prompt for it.
+const savedConfig = getSavedConfig();
+if (savedConfig) {
+  initFirebase(savedConfig);
+} else {
+  document.getElementById('configWarning').classList.remove('hidden');
+  openSettingsModal();
+}
+
+/* ============================================================
+   2. TUNABLE ALGORITHM CONSTANTS
+============================================================= */
+const CATS = ['hijab','top','bottom','shoes'];
+const MIN_PER_CAT = 3;
+const THETA_C = 7;      // comfort threshold for "OP-tier"
+const THETA_A = 7;      // aesthetic threshold for "OP-tier"
+const OP_MAX_PER_WEEK = 2;
+const LAMBDA = 0.15;    // freshness decay rate
+const WEIGHTS = { comfort: 1, aesthetic: 1, freshness: 1, energy: 1 };
+const TOP_BOTTOM_WEEKLY_CAP = 2; // tops/bottoms capped at 2 uses/week; hijab & shoes uncapped
+
+/* ============================================================
+   3. LOCAL STATE (mirrors Firestore, refreshed on load)
+============================================================= */
+let state = {
+  items: [],      // {id, category, photo, comfort, energy, rainSavvy, available, createdAt}
+  pairs: [],      // top-bottom: {id, topId, bottomId, approved}
+  trios: [],      // {id, topId, bottomId, hijabId, approved}
+  outfits: [],    // {id, topId, bottomId, hijabId, shoesId, aesthetic}
+  wears: []       // {id, outfitId, date (yyyy-mm-dd)}
+};
+
+let selectedAvailItems = new Set();
+let quizQueue = [];
+
+/* ============================================================
+   4. FIRESTORE HELPERS
+============================================================= */
+async function loadAll() {
+  if (!db) return;
+  const [itemsSnap, pairsSnap, triosSnap, outfitsSnap, wearsSnap] = await Promise.all([
+    db.collection('items').get(),
+    db.collection('pairs').get(),
+    db.collection('trios').get(),
+    db.collection('outfits').get(),
+    db.collection('wears').get()
+  ]);
+  state.items = itemsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  state.pairs = pairsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  state.trios = triosSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  state.outfits = outfitsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  state.wears = wearsSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+  renderAll();
+}
+
+async function addItem(data) {
+  const ref = await db.collection('items').add(data);
+  state.items.push({ id: ref.id, ...data });
+  return ref.id;
+}
+async function setPair(topId, bottomId, approved) {
+  const ref = await db.collection('pairs').add({ topId, bottomId, approved });
+  state.pairs.push({ id: ref.id, topId, bottomId, approved });
+}
+async function setTrio(topId, bottomId, hijabId, approved) {
+  const ref = await db.collection('trios').add({ topId, bottomId, hijabId, approved });
+  state.trios.push({ id: ref.id, topId, bottomId, hijabId, approved });
+}
+async function addOutfit(topId, bottomId, hijabId, shoesId, aesthetic) {
+  const data = { topId, bottomId, hijabId, shoesId, aesthetic };
+  const ref = await db.collection('outfits').add(data);
+  state.outfits.push({ id: ref.id, ...data });
+}
+async function logWear(outfitId, date) {
+  const data = { outfitId, date };
+  const ref = await db.collection('wears').add(data);
+  state.wears.push({ id: ref.id, ...data });
+}
+async function updateItemAvailability(itemId, available) {
+  await db.collection('items').doc(itemId).update({ available });
+  const it = state.items.find(i => i.id === itemId);
+  if (it) it.available = available;
+}
+
+/* ============================================================
+   5. IMAGE HANDLING (resize + base64, kept small for Firestore doc limits)
+============================================================= */
+function fileToResizedDataURL(file, maxDim = 300) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const reader = new FileReader();
+    reader.onload = e => { img.src = e.target.result; };
+    reader.onerror = reject;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let { width, height } = img;
+      if (width > height && width > maxDim) { height *= maxDim / width; width = maxDim; }
+      else if (height > maxDim) { width *= maxDim / height; height = maxDim; }
+      canvas.width = width; canvas.height = height;
+      canvas.getContext('2d').drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/png', 0.85));
+    };
+    img.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+/* ============================================================
+   6. NAV / TAB SWITCHING
+============================================================= */
+document.getElementById('nav').addEventListener('click', e => {
+  const btn = e.target.closest('button[data-tab]');
+  if (!btn) return;
+  document.querySelectorAll('#nav button').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+  document.querySelectorAll('main > section').forEach(s => s.classList.add('hidden'));
+  document.getElementById('tab-' + btn.dataset.tab).classList.remove('hidden');
+  if (btn.dataset.tab === 'daily') renderDaily();
+  if (btn.dataset.tab === 'availability') renderAvailability();
+  if (btn.dataset.tab === 'history') renderHistory();
+  if (btn.dataset.tab === 'plan') renderPlan();
+});
+
+/* ============================================================
+   7. CLOSET RENDERING
+============================================================= */
+function itemsByCat(cat) { return state.items.filter(i => i.category === cat); }
+
+function isSetupComplete() {
+  return CATS.every(c => itemsByCat(c).length >= MIN_PER_CAT);
+}
+
+function renderCloset() {
+  const progress = document.getElementById('setupProgress');
+  progress.innerHTML = '';
+  CATS.forEach(cat => {
+    const n = itemsByCat(cat).length;
+    const chip = document.createElement('div');
+    chip.className = 'setup-chip' + (n >= MIN_PER_CAT ? ' done' : '');
+    chip.textContent = `${cat[0].toUpperCase()+cat.slice(1)}s ${Math.min(n,MIN_PER_CAT)}/${MIN_PER_CAT}`;
+    progress.appendChild(chip);
+  });
+  document.getElementById('lockedBanner').classList.toggle('hidden', isSetupComplete());
+
+  CATS.forEach(cat => {
+    const grid = document.getElementById('grid-' + cat);
+    grid.innerHTML = '';
+    itemsByCat(cat).forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'item-card' + (item.available === false ? ' unavailable' : '');
+      card.innerHTML = pieceVisual(item);
+      const tag = document.createElement('div');
+      tag.className = 'tag';
+      tag.textContent = `C${item.comfort} · E${item.energy}`;
+      card.appendChild(tag);
+      grid.appendChild(card);
+    });
+  });
+}
+
+document.querySelectorAll('.add-btn').forEach(btn => {
+  btn.addEventListener('click', () => openAddItemModal(btn.dataset.add));
+});
+
+/* ============================================================
+   8. ADD ITEM MODAL
+============================================================= */
+const HIJAB_PRESET_COLORS = [
+  '#1a1a1a','#5c4033','#8a1c1c','#c0392b','#e67e22','#e1b12c',
+  '#2e7d32','#16a085','#2980b9','#34495e','#8e44ad','#c2185b',
+  '#d7bfa6','#f5f0e8','#ffffff','#9e9e9e'
+];
+
+function openAddItemModal(category) {
+  const showRain = category === 'bottom' || category === 'shoes';
+  const isHijab = category === 'hijab';
+  const modalRoot = document.getElementById('modalRoot');
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <h3>Add ${category}</h3>
+        ${isHijab ? `
+        <label class="field">Color</label>
+        <div class="color-picker-row">
+          <input type="color" id="colorInput" value="#2980b9">
+          <div class="color-preview" id="colorPreview" style="background:#2980b9;"></div>
+        </div>
+        <div class="swatch-strip" id="presetSwatches">
+          ${HIJAB_PRESET_COLORS.map(c => `<div class="sw" data-color="${c}" style="background:${c};"></div>`).join('')}
+        </div>
+        ` : `
+        <div class="file-drop" id="dropZone">
+          <div id="dropLabel">Tap to upload photo</div>
+          <input type="file" id="fileInput" accept="image/*" style="display:none">
+        </div>
+        `}
+        <label class="field">Tactile comfort — how it feels on skin</label>
+        <input type="range" min="1" max="10" value="5" id="comfortRange">
+        <div style="text-align:right;font-size:12px;color:var(--muted)"><span id="comfortVal">5</span>/10</div>
+
+        <label class="field">Energy cost — what it takes to wear</label>
+        <div id="energyChecks">
+          <div class="checkbox-row"><input type="checkbox" value="2" class="ec"> Needs ironing</div>
+          <div class="checkbox-row"><input type="checkbox" value="1" class="ec"> Needs tucking in</div>
+          <div class="checkbox-row"><input type="checkbox" value="2" class="ec"> Needs seamless/special underwear</div>
+          <div class="checkbox-row"><input type="checkbox" value="1" class="ec"> Needs a belt</div>
+        </div>
+
+        ${showRain ? `
+        <label class="field">Rain-savvy?</label>
+        <div class="toggle-row">
+          <button type="button" class="rsBtn" data-val="false">No</button>
+          <button type="button" class="rsBtn selected" data-val="true">Yes</button>
+        </div>` : ''}
+
+        <div class="modal-actions">
+          <button class="btn ghost" id="cancelAdd">Cancel</button>
+          <button class="btn primary" id="saveAdd">Add</button>
+        </div>
+      </div>
+    </div>
+  `;
+
+  let photoData = null;
+  let colorData = isHijab ? '#2980b9' : null;
+
+  if (isHijab) {
+    const colorInput = document.getElementById('colorInput');
+    const colorPreview = document.getElementById('colorPreview');
+    colorInput.addEventListener('input', () => {
+      colorData = colorInput.value;
+      colorPreview.style.background = colorData;
+    });
+    document.querySelectorAll('#presetSwatches .sw').forEach(sw => {
+      sw.addEventListener('click', () => {
+        colorData = sw.dataset.color;
+        colorInput.value = colorData;
+        colorPreview.style.background = colorData;
+      });
+    });
+  } else {
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    dropZone.addEventListener('click', () => fileInput.click());
+    fileInput.addEventListener('change', async () => {
+      if (!fileInput.files[0]) return;
+      photoData = await fileToResizedDataURL(fileInput.files[0]);
+      document.getElementById('dropLabel').innerHTML = `Photo selected <br><img src="${photoData}">`;
+    });
+  }
+
+  document.getElementById('comfortRange').addEventListener('input', e => {
+    document.getElementById('comfortVal').textContent = e.target.value;
+  });
+
+  let rainSavvy = true;
+  document.querySelectorAll('.rsBtn').forEach(b => {
+    b.addEventListener('click', () => {
+      document.querySelectorAll('.rsBtn').forEach(x => x.classList.remove('selected'));
+      b.classList.add('selected');
+      rainSavvy = b.dataset.val === 'true';
+    });
+  });
+
+  document.getElementById('cancelAdd').onclick = () => modalRoot.innerHTML = '';
+  document.getElementById('ov').addEventListener('click', e => { if (e.target.id === 'ov') modalRoot.innerHTML = ''; });
+
+  document.getElementById('saveAdd').onclick = async () => {
+    const comfort = parseInt(document.getElementById('comfortRange').value, 10);
+    const energy = Array.from(document.querySelectorAll('.ec:checked')).reduce((s,c) => s + parseInt(c.value,10), 0);
+    const data = {
+      category,
+      photo: isHijab ? null : photoData,
+      color: isHijab ? colorData : null,
+      comfort,
+      energy,
+      rainSavvy: showRain ? rainSavvy : null,
+      available: true,
+      createdAt: Date.now()
+    };
+    if (!db) { alert('Firebase not configured — see the yellow banner at the top.'); return; }
+    const newId = await addItem(data);
+    modalRoot.innerHTML = '';
+    renderCloset();
+    buildQuizQueueForNewItem({ id: newId, ...data });
+    runNextQuizStep();
+  };
+}
+
+/* ============================================================
+   9. MATCHING QUIZ
+============================================================= */
+function pairApproved(topId, bottomId) {
+  return state.pairs.some(p => p.topId === topId && p.bottomId === bottomId && p.approved);
+}
+function pairDecided(topId, bottomId) {
+  return state.pairs.some(p => p.topId === topId && p.bottomId === bottomId);
+}
+function trioApproved(topId, bottomId, hijabId) {
+  return state.trios.some(t => t.topId===topId && t.bottomId===bottomId && t.hijabId===hijabId && t.approved);
+}
+function trioDecided(topId, bottomId, hijabId) {
+  return state.trios.some(t => t.topId===topId && t.bottomId===bottomId && t.hijabId===hijabId);
+}
+function comboExists(topId, bottomId, hijabId, shoesId) {
+  return state.outfits.some(o => o.topId===topId && o.bottomId===bottomId && o.hijabId===hijabId && o.shoesId===shoesId);
+}
+
+// Builds the queue of yes/no questions triggered by a newly added item.
+function buildQuizQueueForNewItem(newItem) {
+  quizQueue = [];
+  const tops = itemsByCat('top'), bottoms = itemsByCat('bottom'), hijabs = itemsByCat('hijab'), shoes = itemsByCat('shoes');
+
+  if (newItem.category === 'top') {
+    bottoms.forEach(b => { if (!pairDecided(newItem.id, b.id)) quizQueue.push({ type:'pair', topId:newItem.id, bottomId:b.id }); });
+  } else if (newItem.category === 'bottom') {
+    tops.forEach(t => { if (!pairDecided(t.id, newItem.id)) quizQueue.push({ type:'pair', topId:t.id, bottomId:newItem.id }); });
+  } else if (newItem.category === 'hijab') {
+    state.pairs.filter(p => p.approved).forEach(p => {
+      if (!trioDecided(p.topId, p.bottomId, newItem.id)) quizQueue.push({ type:'trio', topId:p.topId, bottomId:p.bottomId, hijabId:newItem.id });
+    });
+  } else if (newItem.category === 'shoes') {
+    state.trios.filter(t => t.approved).forEach(t => {
+      if (!comboExists(t.topId, t.bottomId, t.hijabId, newItem.id)) quizQueue.push({ type:'combo', topId:t.topId, bottomId:t.bottomId, hijabId:t.hijabId, shoesId:newItem.id });
+    });
+  }
+}
+
+// After any pair/trio gets approved mid-quiz, chain forward to the next stage.
+function extendQueueAfterApproval(step) {
+  const hijabs = itemsByCat('hijab'), shoes = itemsByCat('shoes');
+  if (step.type === 'pair') {
+    hijabs.forEach(h => { if (!trioDecided(step.topId, step.bottomId, h.id)) quizQueue.push({ type:'trio', topId:step.topId, bottomId:step.bottomId, hijabId:h.id }); });
+  } else if (step.type === 'trio') {
+    shoes.forEach(s => { if (!comboExists(step.topId, step.bottomId, step.hijabId, s.id)) quizQueue.push({ type:'combo', topId:step.topId, bottomId:step.bottomId, hijabId:step.hijabId, shoesId:s.id }); });
+  }
+}
+
+function findItem(id) { return state.items.find(i => i.id === id); }
+
+// Hijabs are represented by a color swatch; everything else by an uploaded photo.
+function pieceVisual(item, extraClass = '') {
+  if (!item) return '';
+  if (item.category === 'hijab') {
+    return `<div class="swatch ${extraClass}" style="background:${item.color || '#ccc'};"></div>`;
+  }
+  return item.photo ? `<img class="${extraClass}" src="${item.photo}">` : `<div class="ph ${extraClass}">no photo</div>`;
+}
+
+async function runNextQuizStep() {
+  const modalRoot = document.getElementById('modalRoot');
+  if (quizQueue.length === 0) { modalRoot.innerHTML = ''; return; }
+  const step = quizQueue.shift();
+
+  let pieces = [];
+  if (step.type === 'pair') pieces = [findItem(step.topId), findItem(step.bottomId)];
+  if (step.type === 'trio') pieces = [findItem(step.topId), findItem(step.bottomId), findItem(step.hijabId)];
+  if (step.type === 'combo') pieces = [findItem(step.topId), findItem(step.bottomId), findItem(step.hijabId), findItem(step.shoesId)];
+
+  if (pieces.some(p => !p)) { runNextQuizStep(); return; } // safety skip if item missing
+
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="modal">
+        <h3>${step.type === 'pair' ? 'Good pair?' : step.type === 'trio' ? 'Add this hijab?' : 'Add these shoes?'}</h3>
+        <div class="quiz-pair">
+          ${pieces.map(p => `<div class="piece">${pieceVisual(p)}</div>`).join('<div class="quiz-plus">+</div>')}
+        </div>
+        <div class="quiz-buttons">
+          <button class="no" id="quizNo">✕</button>
+          <button class="yes" id="quizYes">✓</button>
+        </div>
+        <div class="quiz-progress">${quizQueue.length} more question${quizQueue.length===1?'':'s'} after this</div>
+      </div>
+    </div>
+  `;
+
+  document.getElementById('quizNo').onclick = async () => {
+    await recordQuizDecision(step, false);
+    runNextQuizStep();
+  };
+  document.getElementById('quizYes').onclick = async () => {
+    await recordQuizDecision(step, true);
+    if (step.type === 'combo') {
+      promptAestheticRating(step);
+      return; // aesthetic modal continues the chain itself
+    }
+    extendQueueAfterApproval(step);
+    runNextQuizStep();
+  };
+}
+
+async function recordQuizDecision(step, approved) {
+  if (step.type === 'pair') await setPair(step.topId, step.bottomId, approved);
+  if (step.type === 'trio') await setTrio(step.topId, step.bottomId, step.hijabId, approved);
+  // 'combo' approval is finalized in promptAestheticRating (needs a score to become an outfit)
+}
+
+function promptAestheticRating(step) {
+  const modalRoot = document.getElementById('modalRoot');
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="modal">
+        <h3>How good does this look together?</h3>
+        <input type="range" min="1" max="10" value="7" id="aestheticRange">
+        <div style="text-align:right;font-size:12px;color:var(--muted)"><span id="aestheticVal">7</span>/10</div>
+        <div class="modal-actions">
+          <button class="btn primary" id="saveAesthetic">Save outfit</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('aestheticRange').addEventListener('input', e => {
+    document.getElementById('aestheticVal').textContent = e.target.value;
+  });
+  document.getElementById('saveAesthetic').onclick = async () => {
+    const aesthetic = parseInt(document.getElementById('aestheticRange').value, 10);
+    await addOutfit(step.topId, step.bottomId, step.hijabId, step.shoesId, aesthetic);
+    runNextQuizStep();
+  };
+}
+
+/* ============================================================
+   10. DAILY SUGGESTION ALGORITHM
+============================================================= */
+function startOfWeek(date = new Date()) {
+  const d = new Date(date);
+  const day = (d.getDay() + 6) % 7; // Monday = 0
+  d.setDate(d.getDate() - day);
+  d.setHours(0,0,0,0);
+  return d;
+}
+function toDateStr(d) { return d.toISOString().slice(0,10); }
+
+function wearsThisWeek() {
+  const start = startOfWeek();
+  return state.wears.filter(w => new Date(w.date) >= start);
+}
+
+function outfitWornThisWeek(outfitId) {
+  return wearsThisWeek().some(w => w.outfitId === outfitId);
+}
+
+function pieceUsesThisWeek(itemId) {
+  const outfitIds = new Set(wearsThisWeek().map(w => w.outfitId));
+  let count = 0;
+  state.outfits.forEach(o => {
+    if (!outfitIds.has(o.id)) return;
+    if (o.topId === itemId || o.bottomId === itemId || o.hijabId === itemId || o.shoesId === itemId) count++;
+  });
+  return count;
+}
+
+function daysSinceWorn(itemId) {
+  const wearsForItem = state.wears
+    .map(w => ({ ...w, outfit: state.outfits.find(o => o.id === w.outfitId) }))
+    .filter(w => w.outfit && [w.outfit.topId, w.outfit.bottomId, w.outfit.hijabId, w.outfit.shoesId].includes(itemId));
+  if (wearsForItem.length === 0) return 999; // never worn -> effectively no penalty
+  const mostRecent = wearsForItem.reduce((max, w) => new Date(w.date) > new Date(max) ? w.date : max, wearsForItem[0].date);
+  return Math.floor((Date.now() - new Date(mostRecent)) / (1000*60*60*24));
+}
+
+function outfitComfort(o) {
+  const pieces = [findItem(o.topId), findItem(o.bottomId), findItem(o.hijabId), findItem(o.shoesId)];
+  return pieces.reduce((s,p) => s + (p ? p.comfort : 0), 0) / 4;
+}
+function outfitEnergy(o) {
+  const pieces = [findItem(o.topId), findItem(o.bottomId), findItem(o.hijabId), findItem(o.shoesId)];
+  return pieces.reduce((s,p) => s + (p ? p.energy : 0), 0);
+}
+function outfitFreshnessPenalty(o) {
+  const ids = [o.topId, o.bottomId, o.hijabId, o.shoesId];
+  return ids.reduce((s,id) => s + Math.exp(-LAMBDA * daysSinceWorn(id)), 0);
+}
+function isOPTier(o) {
+  return outfitComfort(o) >= THETA_C && o.aesthetic >= THETA_A;
+}
+function opUsedThisWeek() {
+  return wearsThisWeek().filter(w => {
+    const o = state.outfits.find(x => x.id === w.outfitId);
+    return o && isOPTier(o);
+  }).length;
+}
+
+function candidateOutfits(isRaining) {
+  return state.outfits.filter(o => {
+    const top = findItem(o.topId), bottom = findItem(o.bottomId), hijab = findItem(o.hijabId), shoes = findItem(o.shoesId);
+    if (!top || !bottom || !hijab || !shoes) return false;
+    if (top.available === false || bottom.available === false || hijab.available === false || shoes.available === false) return false;
+    if (isRaining && (bottom.rainSavvy === false || shoes.rainSavvy === false)) return false;
+    if (outfitWornThisWeek(o.id)) return false;
+    if (pieceUsesThisWeek(o.topId) >= TOP_BOTTOM_WEEKLY_CAP) return false;
+    if (pieceUsesThisWeek(o.bottomId) >= TOP_BOTTOM_WEEKLY_CAP) return false;
+    return true;
+  });
+}
+
+function scoreOutfit(o) {
+  return WEIGHTS.comfort * outfitComfort(o)
+       + WEIGHTS.aesthetic * o.aesthetic
+       - WEIGHTS.freshness * outfitFreshnessPenalty(o)
+       - WEIGHTS.energy * outfitEnergy(o);
+}
+
+function getRankedCandidates(isRaining) {
+  let pool = candidateOutfits(isRaining);
+  if (opUsedThisWeek() >= OP_MAX_PER_WEEK) pool = pool.filter(o => !isOPTier(o));
+  return pool
+    .map(o => ({ outfit: o, score: scoreOutfit(o) }))
+    .sort((a,b) => b.score - a.score);
+}
+
+let isRainingToday = false;
+document.getElementById('rainNo').onclick = () => { isRainingToday = false; toggleRainBtns(); renderDaily(); };
+document.getElementById('rainYes').onclick = () => { isRainingToday = true; toggleRainBtns(); renderDaily(); };
+function toggleRainBtns() {
+  document.getElementById('rainNo').classList.toggle('selected', !isRainingToday);
+  document.getElementById('rainYes').classList.toggle('selected', isRainingToday);
+}
+
+function outfitImgs(o) {
+  return [o.hijabId, o.topId, o.bottomId, o.shoesId].map(id => findItem(id)).filter(Boolean)
+    .map(p => pieceVisual(p)).join('');
+}
+
+function renderDaily() {
+  const el = document.getElementById('dailyContent');
+  if (!isSetupComplete()) { el.innerHTML = `<div class="no-outfit">Finish setup first — add at least 3 of each piece.</div>`; return; }
+  const ranked = getRankedCandidates(isRainingToday);
+  if (ranked.length === 0) { el.innerHTML = `<div class="no-outfit">No valid outfits left for today under this week's rules. Check Availability or approve more combos.</div>`; return; }
+
+  const best = ranked[0];
+  el.innerHTML = `
+    <div class="daily-card">
+      <div class="daily-pieces">${outfitImgs(best.outfit)}</div>
+      <div class="daily-score">score ${best.score.toFixed(1)}</div>
+      <button class="btn primary" id="wearThisBtn">Wear this</button>
+      <div style="margin-top:10px;">
+        <button class="btn ghost" id="showMoreBtn">Show more options</button>
+      </div>
+    </div>
+    <div class="fallback-list hidden" id="fallbackList"></div>
+  `;
+
+  document.getElementById('wearThisBtn').onclick = async () => {
+    await logWear(best.outfit.id, toDateStr(new Date()));
+    renderDaily(); renderHistory();
+  };
+  document.getElementById('showMoreBtn').onclick = () => {
+    const list = document.getElementById('fallbackList');
+    list.classList.remove('hidden');
+    list.innerHTML = ranked.slice(0,5).map(r => `
+      <div class="outfit-row" data-id="${r.outfit.id}">
+        ${outfitImgs(r.outfit)}
+        <span class="score">${r.score.toFixed(1)}</span>
+      </div>
+    `).join('');
+    list.querySelectorAll('.outfit-row').forEach(row => {
+      row.onclick = async () => {
+        await logWear(row.dataset.id, toDateStr(new Date()));
+        renderDaily(); renderHistory();
+      };
+    });
+  };
+}
+
+/* ============================================================
+   11. AVAILABILITY TAB
+============================================================= */
+function renderAvailability() {
+  const grid = document.getElementById('availGrid');
+  selectedAvailItems.clear();
+  grid.innerHTML = CATS.map(cat => `
+    <div class="section-block">
+      <div class="section-title"><h2>${cat}s</h2></div>
+      <div class="item-grid" id="avgrid-${cat}"></div>
+    </div>
+  `).join('');
+
+  CATS.forEach(cat => {
+    const g = document.getElementById('avgrid-' + cat);
+    itemsByCat(cat).forEach(item => {
+      const card = document.createElement('div');
+      card.className = 'item-card' + (item.available === false ? ' unavailable' : '');
+      card.dataset.id = item.id;
+      card.innerHTML = pieceVisual(item);
+      card.onclick = () => {
+        if (selectedAvailItems.has(item.id)) { selectedAvailItems.delete(item.id); card.classList.remove('selected'); }
+        else { selectedAvailItems.add(item.id); card.classList.add('selected'); }
+      };
+      g.appendChild(card);
+    });
+  });
+}
+document.getElementById('markAvailable').onclick = async () => {
+  for (const id of selectedAvailItems) await updateItemAvailability(id, true);
+  renderAvailability(); renderCloset();
+};
+document.getElementById('markUnavailable').onclick = async () => {
+  for (const id of selectedAvailItems) await updateItemAvailability(id, false);
+  renderAvailability(); renderCloset();
+};
+
+/* ============================================================
+   12. HISTORY TAB
+============================================================= */
+function renderHistory() {
+  const start = startOfWeek();
+  const strip = document.getElementById('weekStrip');
+  strip.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start); d.setDate(d.getDate() + i);
+    const dateStr = toDateStr(d);
+    const wear = state.wears.find(w => w.date === dateStr);
+    const outfit = wear ? state.outfits.find(o => o.id === wear.outfitId) : null;
+    const chip = document.createElement('div');
+    chip.className = 'day-chip' + (outfit ? '' : ' empty');
+    chip.innerHTML = `<div class="d">${d.toLocaleDateString(undefined,{weekday:'short'})}</div>` +
+      (outfit ? `<img src="${findItem(outfit.topId)?.photo || ''}">` : 'not set');
+    chip.onclick = () => {
+      const detail = document.getElementById('historyDetail');
+      detail.innerHTML = outfit
+        ? `<div class="daily-pieces">${outfitImgs(outfit)}</div>`
+        : `<div class="no-outfit">Nothing logged for ${dateStr}.</div>`;
+    };
+    strip.appendChild(chip);
+  }
+}
+
+/* ============================================================
+   13. PLAN WEEK TAB
+============================================================= */
+function renderPlan() {
+  const start = startOfWeek();
+  const strip = document.getElementById('planStrip');
+  strip.innerHTML = '';
+  for (let i = 0; i < 7; i++) {
+    const d = new Date(start); d.setDate(d.getDate() + i);
+    const dateStr = toDateStr(d);
+    const wear = state.wears.find(w => w.date === dateStr);
+    const chip = document.createElement('div');
+    chip.className = 'day-chip' + (wear ? '' : ' empty');
+    chip.innerHTML = `<div class="d">${d.toLocaleDateString(undefined,{weekday:'short'})}</div>` + (wear ? '✓ set' : 'tap to set');
+    chip.onclick = () => openPlanPickerForDate(dateStr);
+    strip.appendChild(chip);
+  }
+}
+function openPlanPickerForDate(dateStr) {
+  const picker = document.getElementById('planPicker');
+  const options = state.outfits.filter(o => !outfitWornThisWeek(o.id) || state.wears.some(w=>w.date===dateStr && w.outfitId===o.id));
+  picker.innerHTML = `<h3 style="font-size:14px;">Pick outfit for ${dateStr}</h3>` + options.map(o => `
+    <div class="outfit-row" data-id="${o.id}">${outfitImgs(o)}<span class="score">${o.aesthetic}/10 look</span></div>
+  `).join('');
+  picker.querySelectorAll('.outfit-row').forEach(row => {
+    row.onclick = async () => {
+      await logWear(row.dataset.id, dateStr);
+      renderPlan(); renderHistory();
+    };
+  });
+}
+
+/* ============================================================
+   14. INIT
+============================================================= */
+function renderAll() {
+  renderCloset();
+  renderDaily();
+}
+// Initial load happens inside initFirebase() above, once anonymous
+// sign-in completes — not here, to avoid fetching before a session exists.
+</script>
+</body>
+</html>
