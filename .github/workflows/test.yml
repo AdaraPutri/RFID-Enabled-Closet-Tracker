@@ -1,0 +1,17 @@
+# Runs on every push. A pull request is not required for these checks.
+# pull_request is included so a fork PR is still tested; same-repo PRs
+# already get a push event, so that case is skipped here to avoid a double run.
+name: Test
+on:
+  push:
+  pull_request:
+jobs:
+  test:
+    if: github.event_name == 'push' || github.event.pull_request.head.repo.full_name != github.repository
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm test
