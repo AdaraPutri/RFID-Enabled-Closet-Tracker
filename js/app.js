@@ -14,7 +14,7 @@ import {
   outfitWornThisWeek,
   getRankedCandidates
 } from './algorithm.js';
-import { firebaseConfig } from './firebaseConfig.js';
+import { getSavedConfig } from './config.js';
 import {
   createState,
   loadAll,
@@ -76,13 +76,28 @@ function showAuthError(message) {
 }
 
 const firebaseApp = globalThis.firebase;
-firebaseApp.initializeApp(firebaseConfig);
-db = firebaseApp.firestore();
-const googleProvider = new firebaseApp.auth.GoogleAuthProvider();
-googleProvider.setCustomParameters({ prompt: 'select_account' });
+// On Firebase Hosting, /__/firebase/init.js already called initializeApp.
+// Locally, the project config stays in this browser and is never committed.
+if (!firebaseApp.apps.length) {
+  const savedConfig = getSavedConfig();
+  if (savedConfig && savedConfig.apiKey && savedConfig.projectId) {
+    firebaseApp.initializeApp(savedConfig);
+  }
+}
+if (firebaseApp.apps.length) {
+  db = firebaseApp.firestore();
+}
+const googleProvider = firebaseApp.apps.length
+  ? new firebaseApp.auth.GoogleAuthProvider()
+  : null;
+if (googleProvider) googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 document.getElementById('googleSignIn').addEventListener('click', async () => {
   const button = document.getElementById('googleSignIn');
+  if (!googleProvider) {
+    showAuthError('This browser does not have the Firebase project config, so Google sign-in cannot start.');
+    return;
+  }
   button.disabled = true;
   try {
     await firebaseApp.auth().signInWithPopup(googleProvider);
@@ -104,10 +119,12 @@ document.getElementById('googleSignIn').addEventListener('click', async () => {
 });
 
 document.getElementById('signOutBtn').addEventListener('click', () => {
-  firebaseApp.auth().signOut();
+  if (firebaseApp.apps.length) firebaseApp.auth().signOut();
 });
 
-firebaseApp.auth().onAuthStateChanged(async (user) => {
+if (!firebaseApp.apps.length) {
+  showAuthError('This browser does not have the Firebase project config, so Google sign-in cannot start.');
+} else firebaseApp.auth().onAuthStateChanged(async (user) => {
   // The previous version signed everyone in anonymously. That session is
   // still saved in this browser, and it is not a Google account.
   if (user && user.isAnonymous) {
