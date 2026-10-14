@@ -28,7 +28,8 @@ import {
   setTrio,
   addOutfit,
   logWear,
-  updateItemAvailability
+  updateItemAvailability,
+  deleteItem
 } from './db.js';
 
 const state = createState();
@@ -175,6 +176,13 @@ function renderCloset() {
       tag.className = 'tag';
       tag.textContent = `C${item.comfort} · E${item.energy}`;
       card.appendChild(tag);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'delete-piece';
+      del.setAttribute('aria-label', `Delete ${item.category}`);
+      del.textContent = '×';
+      del.addEventListener('click', () => openDeleteItemModal(item));
+      card.appendChild(del);
       grid.appendChild(card);
     });
   });
@@ -183,6 +191,43 @@ function renderCloset() {
 document.querySelectorAll('.add-btn').forEach(btn => {
   btn.addEventListener('click', () => openAddItemModal(btn.dataset.add));
 });
+
+function openDeleteItemModal(item) {
+  const modalRoot = document.getElementById('modalRoot');
+  const label = item.category === 'shoes' ? 'shoes' : item.category;
+  modalRoot.innerHTML = `
+    <div class="overlay" id="ov">
+      <div class="modal">
+        <h3>Delete this ${label}?</h3>
+        <div class="delete-preview">${pieceVisual(item)}</div>
+        <p class="help">This also removes pairings and outfits that use it. Wear history for those outfits goes with them.</p>
+        <div class="modal-actions">
+          <button class="btn ghost" id="cancelDelete">Cancel</button>
+          <button class="btn danger" id="confirmDelete">Delete</button>
+        </div>
+      </div>
+    </div>
+  `;
+  const close = () => { modalRoot.innerHTML = ''; };
+  document.getElementById('cancelDelete').onclick = close;
+  document.getElementById('ov').addEventListener('click', e => { if (e.target.id === 'ov') close(); });
+  document.getElementById('confirmDelete').onclick = async () => {
+    if (!db) { alert('Firebase not configured — see the yellow banner at the top.'); return; }
+    const btn = document.getElementById('confirmDelete');
+    btn.disabled = true;
+    try {
+      await deleteItem(db, state, item.id);
+      quizQueue = quizQueue.filter(step => ![step.topId, step.bottomId, step.hijabId, step.shoesId].includes(item.id));
+      selectedAvailItems.delete(item.id);
+      close();
+      renderAll();
+    } catch (e) {
+      console.error('Delete failed', e);
+      alert('Couldn\'t delete that piece. Check your connection and try again.');
+      btn.disabled = false;
+    }
+  };
+}
 
 function openAddItemModal(category) {
   const showRain = category === 'bottom' || category === 'shoes';

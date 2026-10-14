@@ -60,3 +60,40 @@ export async function updateItemAvailability(db, state, itemId, available) {
   const it = state.items.find(i => i.id === itemId);
   if (it) it.available = available;
 }
+
+// Pairings, outfits, and wear logs that mention this piece.
+// Returned as ids so a delete can remove them together.
+export function recordsForDeletedItem(state, itemId) {
+  const pairs = state.pairs.filter(p => p.topId === itemId || p.bottomId === itemId);
+  const trios = state.trios.filter(t => t.topId === itemId || t.bottomId === itemId || t.hijabId === itemId);
+  const outfits = state.outfits.filter(o => [o.topId, o.bottomId, o.hijabId, o.shoesId].includes(itemId));
+  const outfitIds = new Set(outfits.map(o => o.id));
+  const wears = state.wears.filter(w => outfitIds.has(w.outfitId));
+  return {
+    pairIds: pairs.map(p => p.id),
+    trioIds: trios.map(t => t.id),
+    outfitIds: outfits.map(o => o.id),
+    wearIds: wears.map(w => w.id)
+  };
+}
+
+export async function deleteItem(db, state, itemId) {
+  const refs = recordsForDeletedItem(state, itemId);
+  const batch = db.batch();
+  batch.delete(db.collection('items').doc(itemId));
+  for (const id of refs.pairIds) batch.delete(db.collection('pairs').doc(id));
+  for (const id of refs.trioIds) batch.delete(db.collection('trios').doc(id));
+  for (const id of refs.outfitIds) batch.delete(db.collection('outfits').doc(id));
+  for (const id of refs.wearIds) batch.delete(db.collection('wears').doc(id));
+  await batch.commit();
+
+  const pairIds = new Set(refs.pairIds);
+  const trioIds = new Set(refs.trioIds);
+  const outfitIds = new Set(refs.outfitIds);
+  const wearIds = new Set(refs.wearIds);
+  state.items = state.items.filter(i => i.id !== itemId);
+  state.pairs = state.pairs.filter(p => !pairIds.has(p.id));
+  state.trios = state.trios.filter(t => !trioIds.has(t.id));
+  state.outfits = state.outfits.filter(o => !outfitIds.has(o.id));
+  state.wears = state.wears.filter(w => !wearIds.has(w.id));
+}
