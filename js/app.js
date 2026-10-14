@@ -457,7 +457,7 @@ function renderDaily() {
       <div class="daily-score">score ${best.score.toFixed(1)}</div>
       <button class="btn primary" id="wearThisBtn">Wear this</button>
       <div class="daily-more">
-        <button class="btn ghost" id="showMoreBtn">Show more options</button>
+        <button class="btn ghost" id="showMoreBtn">Show all ${ranked.length} option${ranked.length === 1 ? '' : 's'}</button>
       </div>
     </div>
     <div class="fallback-list hidden" id="fallbackList"></div>
@@ -471,7 +471,7 @@ function renderDaily() {
   document.getElementById('showMoreBtn').onclick = () => {
     const list = document.getElementById('fallbackList');
     list.classList.remove('hidden');
-    list.innerHTML = ranked.slice(0, 5).map(r => `
+    list.innerHTML = ranked.map(r => `
       <div class="outfit-row" data-id="${r.outfit.id}">
         ${outfitImgs(r.outfit)}
         <span class="score">${r.score.toFixed(1)}</span>
