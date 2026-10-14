@@ -172,10 +172,6 @@ function renderCloset() {
       const card = document.createElement('div');
       card.className = 'item-card' + (item.available === false ? ' unavailable' : '');
       card.innerHTML = pieceVisual(item);
-      const tag = document.createElement('div');
-      tag.className = 'tag';
-      tag.textContent = `C${item.comfort} · E${item.energy}`;
-      card.appendChild(tag);
       const del = document.createElement('button');
       del.type = 'button';
       del.className = 'delete-piece';
