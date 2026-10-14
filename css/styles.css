@@ -32,7 +32,7 @@ header h1{ font-size:20px; margin:0 0 14px; font-weight:600; letter-spacing:-0.2
 .signed-out h2{ font-size:22px; font-weight:600; margin:0 0 10px; }
 .signed-out p{ color:var(--muted); font-size:14px; line-height:1.5; }
 .signed-out .btn{ display:block; width:100%; margin-top:18px; flex:none; }
-.auth-error{ color:var(--bad); }
+.auth-error{ color:var(--bad); margin-top:12px; font-size:14px; }
 nav{ display:flex; gap:4px; overflow-x:auto; }
 nav button{
   background:none; border:none; padding:10px 14px; font-size:14px;

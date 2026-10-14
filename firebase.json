@@ -11,6 +11,14 @@
       "**/test/**",
       "package.json",
       "firestore.rules"
+    ],
+    "headers": [
+      {
+        "source": "**/*.@(html|js|css)",
+        "headers": [
+          { "key": "Cache-Control", "value": "no-cache" }
+        ]
+      }
     ]
   }
 }

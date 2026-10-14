@@ -76,45 +76,108 @@ function showAuthError(message) {
 }
 
 const firebaseApp = globalThis.firebase;
-// On Firebase Hosting, /__/firebase/init.js already called initializeApp.
-// Locally, the project config stays in this browser and is never committed.
-if (!firebaseApp.apps.length) {
-  const savedConfig = getSavedConfig();
-  if (savedConfig && savedConfig.apiKey && savedConfig.projectId) {
-    firebaseApp.initializeApp(savedConfig);
+let googleProvider = null;
+let firebaseReady = null;
+
+function configForThisSite(config) {
+  const next = { ...config };
+  if (!next.databaseURL) delete next.databaseURL;
+  const host = location.hostname;
+  // The hosted page and the Google handoff have to be the same site.
+  // Otherwise the sign-in window can close and the button looks dead.
+  if (host.endsWith('.web.app') || host.endsWith('.firebaseapp.com')) {
+    next.authDomain = host;
   }
+  return next;
 }
-if (firebaseApp.apps.length) {
+
+function loadHostedInitScript() {
+  return new Promise((resolve, reject) => {
+    const script = document.createElement('script');
+    script.src = 'https://closetronic.web.app/__/firebase/init.js';
+    script.onload = () => resolve();
+    script.onerror = () => reject(new Error('Firebase config failed to load'));
+    document.head.appendChild(script);
+  });
+}
+
+async function loadFirebaseConfig() {
+  try {
+    const res = await fetch('/__/firebase/init.json');
+    if (res.ok) {
+      const config = await res.json();
+      if (config && config.apiKey && config.projectId) return config;
+    }
+  } catch (e) {}
+  const saved = getSavedConfig();
+  if (saved && saved.apiKey && saved.projectId) return saved;
+  return null;
+}
+
+function ensureFirebase() {
+  if (!firebaseReady) firebaseReady = startFirebase();
+  return firebaseReady;
+}
+
+async function startFirebase() {
+  if (!firebaseApp.apps.length) {
+    const config = await loadFirebaseConfig();
+    if (config) firebaseApp.initializeApp(configForThisSite(config));
+    else {
+      try { await loadHostedInitScript(); } catch (e) {}
+    }
+  }
+  if (!firebaseApp.apps.length) return false;
   db = firebaseApp.firestore();
+  googleProvider = new firebaseApp.auth.GoogleAuthProvider();
+  googleProvider.setCustomParameters({ prompt: 'select_account' });
+  return true;
 }
-const googleProvider = firebaseApp.apps.length
-  ? new firebaseApp.auth.GoogleAuthProvider()
-  : null;
-if (googleProvider) googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+function authFailureMessage(error) {
+  if (error && error.code === 'auth/operation-not-allowed') {
+    return 'Google sign-in still needs to be turned on in the Firebase project (Authentication → Sign-in method → Google).';
+  }
+  if (error && error.code === 'auth/unauthorized-domain') {
+    return 'This website is not on the Firebase authorized domains list yet.';
+  }
+  if (error && error.code === 'auth/popup-closed-by-user') {
+    return 'Google sign-in closed before it finished. Try again.';
+  }
+  if (error && error.code === 'auth/popup-blocked') {
+    return 'The browser blocked the Google window.';
+  }
+  return 'Couldn\'t sign in with Google. Try again in a moment.';
+}
 
 document.getElementById('googleSignIn').addEventListener('click', async () => {
   const button = document.getElementById('googleSignIn');
-  if (!googleProvider) {
-    showAuthError('This browser does not have the Firebase project config, so Google sign-in cannot start.');
-    return;
-  }
   button.disabled = true;
+  button.textContent = 'Opening Google…';
   try {
-    await firebaseApp.auth().signInWithPopup(googleProvider);
-  } catch (e) {
-    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
-    if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
-      await firebaseApp.auth().signInWithRedirect(googleProvider);
+    const ready = await ensureFirebase();
+    if (!ready) {
+      showAuthError('This browser does not have the Firebase project config, so Google sign-in cannot start.');
       return;
     }
-    console.error('Google sign-in failed', e);
-    if (e.code === 'auth/operation-not-allowed') {
-      showAuthError('Google sign-in still needs to be turned on in the Firebase project (Authentication → Sign-in method → Google).');
-    } else {
-      showAuthError('Couldn\'t sign in with Google. Try again in a moment.');
+    try {
+      await firebaseApp.auth().signInWithPopup(googleProvider);
+    } catch (e) {
+      if (e.code === 'auth/cancelled-popup-request') return;
+      if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+        showAuthError('Opening Google in this tab…');
+        await firebaseApp.auth().signInWithRedirect(googleProvider);
+        return;
+      }
+      console.error('Google sign-in failed', e);
+      showAuthError(authFailureMessage(e));
     }
+  } catch (e) {
+    console.error('Google sign-in failed', e);
+    showAuthError(authFailureMessage(e));
   } finally {
     button.disabled = false;
+    button.textContent = 'Sign in with Google';
   }
 });
 
@@ -122,9 +185,18 @@ document.getElementById('signOutBtn').addEventListener('click', () => {
   if (firebaseApp.apps.length) firebaseApp.auth().signOut();
 });
 
-if (!firebaseApp.apps.length) {
-  showAuthError('This browser does not have the Firebase project config, so Google sign-in cannot start.');
-} else firebaseApp.auth().onAuthStateChanged(async (user) => {
+ensureFirebase().then(async (ready) => {
+  if (!ready) {
+    showAuthError('This browser does not have the Firebase project config, so Google sign-in cannot start.');
+    return;
+  }
+  try {
+    await firebaseApp.auth().getRedirectResult();
+  } catch (e) {
+    console.error('Google redirect sign-in failed', e);
+    showAuthError(authFailureMessage(e));
+  }
+  firebaseApp.auth().onAuthStateChanged(async (user) => {
   // The previous version signed everyone in anonymously. That session is
   // still saved in this browser, and it is not a Google account.
   if (user && user.isAnonymous) {
@@ -148,6 +220,7 @@ if (!firebaseApp.apps.length) {
     showAuthError('Signed in, but the closet could not be loaded.');
     document.getElementById('signedOut').classList.remove('hidden');
   }
+  });
 });
 
 function fileToResizedDataURL(file, maxDim = 300) {
