@@ -153,7 +153,10 @@ input[type=range]{ width:100%; }
   border:1px solid var(--line); border-radius:14px; padding:20px; text-align:center;
 }
 .daily-pieces{ display:flex; justify-content:center; gap:10px; margin:16px 0; flex-wrap:wrap; }
-.daily-pieces img, .daily-pieces .swatch{ width:100px; height:100px; object-fit:cover; border-radius:10px; border:1px solid var(--line); }
+.daily-pieces img, .daily-pieces .swatch,
+#planPicker .outfit-row img, #planPicker .outfit-row .swatch, #planPicker .outfit-row .ph{
+  width:100px; height:100px; object-fit:cover; border-radius:10px; border:1px solid var(--line); flex:none;
+}
 .daily-score{ font-size:12px; color:var(--muted); margin-bottom:10px; }
 .daily-more{ margin-top:10px; }
 .no-outfit{ color:var(--muted); font-size:14px; padding:30px 0; text-align:center; }
@@ -184,3 +187,9 @@ small.muted{ color:var(--muted); }
   font-size:13px; margin-bottom:20px;
 }
 .picker-title{ font-size:14px; }
+#planPicker .outfit-row{
+  display:flex; align-items:center; gap:10px; flex-wrap:wrap;
+  border:1px solid var(--line); border-radius:10px;
+  padding:10px; margin-bottom:8px; cursor:pointer;
+}
+#planPicker .score{ margin-left:auto; font-size:12px; color:var(--muted); }
