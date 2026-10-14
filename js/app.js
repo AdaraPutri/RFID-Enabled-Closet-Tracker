@@ -14,12 +14,7 @@ import {
   outfitWornThisWeek,
   getRankedCandidates
 } from './algorithm.js';
-import {
-  getSavedConfig,
-  saveConfig,
-  parseFirebaseConfigInput,
-  emptyConfigTemplate
-} from './config.js';
+import { firebaseConfig } from './firebaseConfig.js';
 import {
   createState,
   loadAll,
@@ -34,6 +29,7 @@ import {
 
 const state = createState();
 let db = null;
+let uid = null;
 let selectedAvailItems = new Set();
 let quizQueue = [];
 let isRainingToday = false;
@@ -46,79 +42,96 @@ const HIJAB_PRESET_COLORS = [
   '#d7bfa6', '#f5f0e8', '#ffffff', '#9e9e9e'
 ];
 
-// Initializes Firebase with a given config, signs in anonymously, and
-// only THEN loads data — fixes the race condition where data fetches
-// were firing before the anonymous session existed, which made
-// Firestore silently deny the read (looked like "data gone").
-async function initFirebase(configObj) {
-  const firebase = globalThis.firebase;
+function resetState() {
+  const fresh = createState();
+  for (const key of Object.keys(fresh)) state[key] = fresh[key];
+  selectedAvailItems.clear();
+  quizQueue = [];
+}
+
+function showSignedOut() {
+  document.getElementById('signedOut').classList.remove('hidden');
+  document.getElementById('appMain').classList.add('hidden');
+  document.getElementById('nav').classList.add('hidden');
+  document.getElementById('signOutBtn').classList.add('hidden');
+  document.getElementById('accountLabel').classList.add('hidden');
+  document.getElementById('modalRoot').innerHTML = '';
+}
+
+function showSignedIn(user) {
+  document.getElementById('signedOut').classList.add('hidden');
+  document.getElementById('authError').classList.add('hidden');
+  document.getElementById('appMain').classList.remove('hidden');
+  document.getElementById('nav').classList.remove('hidden');
+  document.getElementById('signOutBtn').classList.remove('hidden');
+  const label = document.getElementById('accountLabel');
+  label.textContent = user.email || 'Signed in';
+  label.classList.remove('hidden');
+}
+
+function showAuthError(message) {
+  const errEl = document.getElementById('authError');
+  errEl.textContent = message;
+  errEl.classList.remove('hidden');
+}
+
+const firebaseApp = globalThis.firebase;
+firebaseApp.initializeApp(firebaseConfig);
+db = firebaseApp.firestore();
+const googleProvider = new firebaseApp.auth.GoogleAuthProvider();
+googleProvider.setCustomParameters({ prompt: 'select_account' });
+
+document.getElementById('googleSignIn').addEventListener('click', async () => {
+  const button = document.getElementById('googleSignIn');
+  button.disabled = true;
   try {
-    if (firebase.apps.length) {
-      firebase.apps.forEach(a => a.delete());
+    await firebaseApp.auth().signInWithPopup(googleProvider);
+  } catch (e) {
+    if (e.code === 'auth/popup-closed-by-user' || e.code === 'auth/cancelled-popup-request') return;
+    if (e.code === 'auth/popup-blocked' || e.code === 'auth/operation-not-supported-in-this-environment') {
+      await firebaseApp.auth().signInWithRedirect(googleProvider);
+      return;
     }
-    firebase.initializeApp(configObj);
-    db = firebase.firestore();
-    await firebase.auth().signInAnonymously();
-    document.getElementById('configWarning').classList.add('hidden');
-    await loadAll(db, state);
+    console.error('Google sign-in failed', e);
+    if (e.code === 'auth/operation-not-allowed') {
+      showAuthError('Google sign-in still needs to be turned on in the Firebase project (Authentication → Sign-in method → Google).');
+    } else {
+      showAuthError('Couldn\'t sign in with Google. Try again in a moment.');
+    }
+  } finally {
+    button.disabled = false;
+  }
+});
+
+document.getElementById('signOutBtn').addEventListener('click', () => {
+  firebaseApp.auth().signOut();
+});
+
+firebaseApp.auth().onAuthStateChanged(async (user) => {
+  // The previous version signed everyone in anonymously. That session is
+  // still saved in this browser, and it is not a Google account.
+  if (user && user.isAnonymous) {
+    await firebaseApp.auth().signOut();
+    return;
+  }
+  if (!user) {
+    uid = null;
+    resetState();
+    showSignedOut();
+    return;
+  }
+  uid = user.uid;
+  try {
+    await loadAll(db, uid, state);
+    showSignedIn(user);
     renderAll();
   } catch (e) {
-    console.error('Firebase init/auth failed', e);
-    db = null;
-    document.getElementById('configWarning').classList.remove('hidden');
+    console.error('Loading closet failed', e);
+    showSignedIn(user);
+    showAuthError('Signed in, but the closet could not be loaded.');
+    document.getElementById('signedOut').classList.remove('hidden');
   }
-}
-
-function openSettingsModal() {
-  const existing = getSavedConfig();
-  const modalRoot = document.getElementById('modalRoot');
-  modalRoot.innerHTML = `
-    <div class="overlay" id="ov">
-      <div class="modal">
-        <h3>Firebase config</h3>
-        <p class="help">
-          Paste the config object from your Firebase project
-          (Project settings → your web app → SDK setup and configuration).
-          This is saved only in this browser's local storage — it is never
-          written back into the HTML file.
-        </p>
-        <textarea id="configTextarea" class="config-input" rows="10">${existing ? JSON.stringify(existing, null, 2) : emptyConfigTemplate()}</textarea>
-        <div class="modal-actions">
-          <button class="btn ghost" id="closeSettings">Close</button>
-          <button class="btn primary" id="saveSettings">Save & connect</button>
-        </div>
-      </div>
-    </div>
-  `;
-  document.getElementById('closeSettings').onclick = () => { modalRoot.innerHTML = ''; };
-  document.getElementById('ov').addEventListener('click', e => { if (e.target.id === 'ov') modalRoot.innerHTML = ''; });
-  document.getElementById('saveSettings').onclick = async () => {
-    const rawInput = document.getElementById('configTextarea').value;
-    const parsed = parseFirebaseConfigInput(rawInput);
-    if (!parsed) {
-      alert('Couldn\'t read that as a config object — make sure you copied the whole { ... } block from Firebase\'s "SDK setup and configuration" page.');
-      return;
-    }
-    if (!parsed.apiKey || !parsed.projectId) {
-      alert('Config looks incomplete — make sure apiKey and projectId are filled in.');
-      return;
-    }
-    saveConfig(parsed);
-    modalRoot.innerHTML = '';
-    await initFirebase(parsed);
-    renderAll();
-  };
-}
-
-document.getElementById('settingsBtn').addEventListener('click', openSettingsModal);
-
-const savedConfig = getSavedConfig();
-if (savedConfig) {
-  initFirebase(savedConfig);
-} else {
-  document.getElementById('configWarning').classList.remove('hidden');
-  openSettingsModal();
-}
+});
 
 function fileToResizedDataURL(file, maxDim = 300) {
   return new Promise((resolve, reject) => {
@@ -208,11 +221,11 @@ function openDeleteItemModal(item) {
   document.getElementById('cancelDelete').onclick = close;
   document.getElementById('ov').addEventListener('click', e => { if (e.target.id === 'ov') close(); });
   document.getElementById('confirmDelete').onclick = async () => {
-    if (!db) { alert('Firebase not configured — see the yellow banner at the top.'); return; }
+    if (!db || !uid) { alert('Sign in with Google first.'); return; }
     const btn = document.getElementById('confirmDelete');
     btn.disabled = true;
     try {
-      await deleteItem(db, state, item.id);
+      await deleteItem(db, uid, state, item.id);
       quizQueue = quizQueue.filter(step => ![step.topId, step.bottomId, step.hijabId, step.shoesId].includes(item.id));
       selectedAvailItems.delete(item.id);
       close();
@@ -332,8 +345,8 @@ function openAddItemModal(category) {
       available: true,
       createdAt: Date.now()
     };
-    if (!db) { alert('Firebase not configured — see the yellow banner at the top.'); return; }
-    const newId = await addItem(db, state, data);
+    if (!db || !uid) { alert('Sign in with Google first.'); return; }
+    const newId = await addItem(db, uid, state, data);
     modalRoot.innerHTML = '';
     renderCloset();
     quizQueue = buildQuizQueueForNewItem(state, { id: newId, ...data });
@@ -394,8 +407,8 @@ async function runNextQuizStep() {
 }
 
 async function recordQuizDecision(step, approved) {
-  if (step.type === 'pair') await setPair(db, state, step.topId, step.bottomId, approved);
-  if (step.type === 'trio') await setTrio(db, state, step.topId, step.bottomId, step.hijabId, approved);
+  if (step.type === 'pair') await setPair(db, uid, state, step.topId, step.bottomId, approved);
+  if (step.type === 'trio') await setTrio(db, uid, state, step.topId, step.bottomId, step.hijabId, approved);
 }
 
 function promptAestheticRating(step) {
@@ -417,7 +430,7 @@ function promptAestheticRating(step) {
   });
   document.getElementById('saveAesthetic').onclick = async () => {
     const aesthetic = parseInt(document.getElementById('aestheticRange').value, 10);
-    await addOutfit(db, state, step.topId, step.bottomId, step.hijabId, step.shoesId, aesthetic);
+    await addOutfit(db, uid, state, step.topId, step.bottomId, step.hijabId, step.shoesId, aesthetic);
     runNextQuizStep();
   };
 }
@@ -460,7 +473,7 @@ function renderDaily() {
   `;
 
   document.getElementById('wearThisBtn').onclick = async () => {
-    await logWear(db, state, best.outfit.id, toDateStr(new Date()));
+    await logWear(db, uid, state, best.outfit.id, toDateStr(new Date()));
     renderDaily();
     renderHistory();
   };
@@ -475,7 +488,7 @@ function renderDaily() {
     `).join('');
     list.querySelectorAll('.outfit-row').forEach(row => {
       row.onclick = async () => {
-        await logWear(db, state, row.dataset.id, toDateStr(new Date()));
+        await logWear(db, uid, state, row.dataset.id, toDateStr(new Date()));
         renderDaily();
         renderHistory();
       };
@@ -510,12 +523,12 @@ function renderAvailability() {
 }
 
 document.getElementById('markAvailable').onclick = async () => {
-  for (const id of selectedAvailItems) await updateItemAvailability(db, state, id, true);
+  for (const id of selectedAvailItems) await updateItemAvailability(db, uid, state, id, true);
   renderAvailability();
   renderCloset();
 };
 document.getElementById('markUnavailable').onclick = async () => {
-  for (const id of selectedAvailItems) await updateItemAvailability(db, state, id, false);
+  for (const id of selectedAvailItems) await updateItemAvailability(db, uid, state, id, false);
   renderAvailability();
   renderCloset();
 };
@@ -567,7 +580,7 @@ function openPlanPickerForDate(dateStr) {
   `).join('');
   picker.querySelectorAll('.outfit-row').forEach(row => {
     row.onclick = async () => {
-      await logWear(db, state, row.dataset.id, dateStr);
+      await logWear(db, uid, state, row.dataset.id, dateStr);
       renderPlan();
       renderHistory();
     };

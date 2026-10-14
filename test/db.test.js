@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordsForDeletedItem } from '../js/db.js';
+import { recordsForDeletedItem, userCollectionPath } from '../js/db.js';
 
 test('deleting a top drops only the pairings, outfits, and wears that use it', () => {
   const state = {
@@ -29,6 +29,10 @@ test('deleting a top drops only the pairings, outfits, and wears that use it', (
     outfitIds: ['o1'],
     wearIds: ['w1']
   });
+});
+
+test('each account has its own closet path', () => {
+  assert.equal(userCollectionPath('abc', 'items'), 'users/abc/items');
 });
 
 test('a piece with no pairings deletes nothing else', () => {

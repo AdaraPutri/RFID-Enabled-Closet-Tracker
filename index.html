@@ -11,24 +11,17 @@
   Stack: HTML / CSS / vanilla JS / Firebase (Firestore)
 
   Files:
-    index.html        this page
-    css/styles.css    layout
-    js/app.js         tabs, modals, events
-    js/db.js          Firestore reads and writes
-    js/algorithm.js   outfit ranking (no DOM, tested in CI)
-    js/config.js      Firebase config saved in this browser only
+    index.html            this page
+    css/styles.css        layout
+    js/app.js             tabs, modals, events
+    js/db.js              per-account Firestore reads and writes
+    js/algorithm.js       outfit ranking (no DOM, tested in CI)
+    js/firebaseConfig.js  public Firebase web config
+    firestore.rules       each Google account can only touch its own closet
 
-  SETUP REQUIRED BEFORE THIS WILL WORK:
-  1. Create a Firebase project at https://console.firebase.google.com
-  2. Enable Firestore, and enable Authentication > Anonymous sign-in.
-  3. Set Firestore rules to: allow read, write: if request.auth != null;
-  4. Open this page in a browser. On first load it will ask you to paste
-     your Firebase web app config (Project settings > your web app).
-     That config is saved in THIS BROWSER's local storage only — it is
-     never written into the repo. If you open the app in a different
-     browser/device, you'll be asked to paste the config again there.
-  5. Use the gear icon in the header any time to view/replace the saved
-     config for this browser.
+  Sign-in is Google. Enable Authentication → Sign-in method → Google
+  in the Firebase console, and deploy firestore.rules, before other
+  people can use their own accounts.
 ============================================================= -->
 
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
@@ -38,8 +31,13 @@
 <body>
 
 <header>
-  <h1>Closetronic <button id="settingsBtn" class="settings-btn" title="Firebase settings">⚙</button></h1>
-  <nav id="nav">
+  <h1>Closetronic
+    <span class="account-tools">
+      <span id="accountLabel" class="account-label hidden"></span>
+      <button id="signOutBtn" class="sign-out-btn hidden" type="button">Sign out</button>
+    </span>
+  </h1>
+  <nav id="nav" class="hidden">
     <button data-tab="closet" class="active">Closet</button>
     <button data-tab="daily">Today</button>
     <button data-tab="availability">Availability</button>
@@ -48,10 +46,14 @@
   </nav>
 </header>
 
-<main>
-  <div id="configWarning" class="config-warning hidden">
-    Firebase isn't connected yet — tap the ⚙ icon above to paste in your project's config.
-  </div>
+<section id="signedOut" class="signed-out">
+  <h2>Sign in</h2>
+  <p>Use your Google account. Your clothes stay on that account, and someone else who signs in gets their own closet.</p>
+  <button type="button" id="googleSignIn" class="btn primary">Sign in with Google</button>
+  <p id="authError" class="auth-error hidden"></p>
+</section>
+
+<main id="appMain" class="hidden">
 
   <!-- CLOSET TAB -->
   <section id="tab-closet">
