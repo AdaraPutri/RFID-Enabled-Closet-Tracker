@@ -82,12 +82,8 @@ let firebaseReady = null;
 function configForThisSite(config) {
   const next = { ...config };
   if (!next.databaseURL) delete next.databaseURL;
-  const host = location.hostname;
-  // The hosted page and the Google handoff have to be the same site.
-  // Otherwise the sign-in window can close and the button looks dead.
-  if (host.endsWith('.web.app') || host.endsWith('.firebaseapp.com')) {
-    next.authDomain = host;
-  }
+  // Keep the authDomain from Firebase. Google only accepts the redirect
+  // URI that was registered with the project, which is the firebaseapp.com handler.
   return next;
 }
 
