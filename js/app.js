@@ -559,7 +559,7 @@ function renderDaily() {
   `;
 
   document.getElementById('wearThisBtn').onclick = async () => {
-    await logWear(db, uid, state, best.outfit.id, toDateStr(new Date()));
+    await logWear(db, uid, state, best.outfit.id, localDateStr(new Date()));
     renderDaily();
     renderHistory();
   };
@@ -574,7 +574,7 @@ function renderDaily() {
     `).join('');
     list.querySelectorAll('.outfit-row').forEach(row => {
       row.onclick = async () => {
-        await logWear(db, uid, state, row.dataset.id, toDateStr(new Date()));
+        await logWear(db, uid, state, row.dataset.id, localDateStr(new Date()));
         renderDaily();
         renderHistory();
       };
@@ -630,8 +630,16 @@ function localDateStr(d) {
   return `${y}-${m}-${day}`;
 }
 
+function wearDay(wear) {
+  const value = wear && wear.date;
+  if (!value) return '';
+  if (typeof value === 'string') return value.slice(0, 10);
+  if (typeof value.toDate === 'function') return localDateStr(value.toDate());
+  return '';
+}
+
 function outfitOnDate(dateStr) {
-  const wear = state.wears.find(w => w.date === dateStr);
+  const wear = state.wears.find(w => wearDay(w) === dateStr);
   return wear ? state.outfits.find(o => o.id === wear.outfitId) : null;
 }
 
