@@ -172,7 +172,35 @@ input[type=range]{ width:100%; }
 .avail-actions .btn{ flex:none; padding:8px 14px; font-size:13px; }
 .item-card.selected{ outline:2px solid var(--ink); }
 
-/* History */
+/* History calendar */
+.calendar-head{
+  display:flex; align-items:center; justify-content:space-between; margin-bottom:12px;
+}
+.calendar-head h2{ font-size:16px; margin:0; font-weight:600; }
+.calendar-head button{
+  width:32px; height:32px; border-radius:8px; border:1px solid var(--line);
+  background:#fff; cursor:pointer; font-size:18px; line-height:1;
+}
+.calendar-weekdays, .calendar-grid{
+  display:grid; grid-template-columns:repeat(7, 1fr); gap:4px;
+}
+.calendar-weekdays{ margin-bottom:4px; }
+.calendar-weekdays div{
+  text-align:center; font-size:11px; color:var(--muted); padding:4px 0;
+}
+.cal-day{
+  aspect-ratio:1; border:1px solid var(--line); border-radius:8px; background:#fff;
+  padding:4px; cursor:pointer; display:flex; flex-direction:column; align-items:stretch;
+  min-width:0; font:inherit; color:inherit;
+}
+.cal-day.outside{ opacity:0.35; }
+.cal-day.today{ border-color:var(--ink); }
+.cal-day.selected{ outline:2px solid var(--ink); outline-offset:1px; }
+.cal-num{ font-size:11px; line-height:1; text-align:left; }
+.cal-day img, .cal-day .cal-swatch{
+  width:100%; flex:1; min-height:0; object-fit:cover; border-radius:4px; margin-top:2px;
+}
+.cal-detail-date{ text-align:center; font-size:13px; color:var(--muted); margin-top:16px; }
 .week-strip{ display:flex; gap:6px; margin-bottom:20px; }
 .day-chip{
   flex:1; text-align:center; border:1px solid var(--line); border-radius:8px; padding:8px 4px; cursor:pointer;

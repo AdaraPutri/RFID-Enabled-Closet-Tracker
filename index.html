@@ -101,7 +101,13 @@
 
   <!-- HISTORY TAB -->
   <section id="tab-history" class="hidden">
-    <div class="week-strip" id="weekStrip"></div>
+    <div class="calendar-head">
+      <button type="button" id="calPrev" aria-label="Previous month">‹</button>
+      <h2 id="calTitle"></h2>
+      <button type="button" id="calNext" aria-label="Next month">›</button>
+    </div>
+    <div class="calendar-weekdays"></div>
+    <div class="calendar-grid" id="calGrid"></div>
     <div id="historyDetail"></div>
   </section>
 

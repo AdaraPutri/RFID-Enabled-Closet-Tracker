@@ -619,28 +619,84 @@ document.getElementById('markUnavailable').onclick = async () => {
   renderCloset();
 };
 
+const historyMonth = new Date();
+historyMonth.setDate(1);
+historyMonth.setHours(0, 0, 0, 0);
+let selectedHistoryDate = null;
+
+function localDateStr(d) {
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function outfitOnDate(dateStr) {
+  const wear = state.wears.find(w => w.date === dateStr);
+  return wear ? state.outfits.find(o => o.id === wear.outfitId) : null;
+}
+
+function calendarThumb(outfit) {
+  const top = findItem(state.items, outfit.topId);
+  if (top && top.photo) return `<img src="${top.photo}" alt="">`;
+  const hijab = findItem(state.items, outfit.hijabId);
+  if (hijab && hijab.color) return `<span class="cal-swatch" style="background:${hijab.color}"></span>`;
+  return '';
+}
+
+function showHistoryDetail(dateStr, outfit) {
+  selectedHistoryDate = dateStr;
+  const label = new Date(dateStr + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
+  const detail = document.getElementById('historyDetail');
+  detail.innerHTML = outfit
+    ? `<div class="cal-detail-date">${label}</div><div class="daily-pieces">${outfitImgs(outfit)}</div>`
+    : `<div class="no-outfit">Nothing logged for ${label}.</div>`;
+  document.querySelectorAll('.cal-day').forEach(cell => {
+    cell.classList.toggle('selected', cell.dataset.date === dateStr);
+  });
+}
+
 function renderHistory() {
-  const start = startOfWeek();
-  const strip = document.getElementById('weekStrip');
-  strip.innerHTML = '';
-  for (let i = 0; i < 7; i++) {
-    const d = new Date(start); d.setDate(d.getDate() + i);
-    const dateStr = toDateStr(d);
-    const wear = state.wears.find(w => w.date === dateStr);
-    const outfit = wear ? state.outfits.find(o => o.id === wear.outfitId) : null;
-    const chip = document.createElement('div');
-    chip.className = 'day-chip' + (outfit ? '' : ' empty');
-    chip.innerHTML = `<div class="d">${d.toLocaleDateString(undefined, { weekday: 'short' })}</div>` +
-      (outfit ? `<img src="${findItem(state.items, outfit.topId)?.photo || ''}">` : 'not set');
-    chip.onclick = () => {
-      const detail = document.getElementById('historyDetail');
-      detail.innerHTML = outfit
-        ? `<div class="daily-pieces">${outfitImgs(outfit)}</div>`
-        : `<div class="no-outfit">Nothing logged for ${dateStr}.</div>`;
-    };
-    strip.appendChild(chip);
+  const year = historyMonth.getFullYear();
+  const month = historyMonth.getMonth();
+  document.getElementById('calTitle').textContent = historyMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
+
+  const weekdays = document.querySelector('#tab-history .calendar-weekdays');
+  weekdays.innerHTML = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(d => `<div>${d}</div>`).join('');
+
+  const gridStart = startOfWeek(new Date(year, month, 1));
+  const lastDay = new Date(year, month + 1, 0);
+  const gridEnd = startOfWeek(lastDay);
+  gridEnd.setDate(gridEnd.getDate() + 6);
+
+  const today = localDateStr(new Date());
+  const grid = document.getElementById('calGrid');
+  grid.innerHTML = '';
+
+  for (let d = new Date(gridStart); d <= gridEnd; d.setDate(d.getDate() + 1)) {
+    const dateStr = localDateStr(d);
+    const outfit = outfitOnDate(dateStr);
+    const cell = document.createElement('button');
+    cell.type = 'button';
+    cell.dataset.date = dateStr;
+    cell.className = 'cal-day'
+      + (d.getMonth() === month ? '' : ' outside')
+      + (dateStr === today ? ' today' : '')
+      + (dateStr === selectedHistoryDate ? ' selected' : '');
+    cell.innerHTML = `<span class="cal-num">${d.getDate()}</span>${outfit ? calendarThumb(outfit) : ''}`;
+    cell.onclick = () => showHistoryDetail(dateStr, outfit);
+    grid.appendChild(cell);
   }
 }
+
+document.getElementById('calPrev').onclick = () => {
+  historyMonth.setMonth(historyMonth.getMonth() - 1);
+  renderHistory();
+};
+document.getElementById('calNext').onclick = () => {
+  historyMonth.setMonth(historyMonth.getMonth() + 1);
+  renderHistory();
+};
 
 function renderPlan() {
   const start = startOfWeek();
