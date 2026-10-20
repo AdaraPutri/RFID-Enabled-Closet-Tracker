@@ -157,6 +157,12 @@ document.getElementById('googleSignIn').addEventListener('click', async () => {
       return;
     }
     try {
+      const onLocalPreview = location.hostname === 'localhost' || location.hostname === '127.0.0.1';
+      if (onLocalPreview) {
+        showAuthError('Opening Google in this tab…');
+        await firebaseApp.auth().signInWithRedirect(googleProvider);
+        return;
+      }
       await firebaseApp.auth().signInWithPopup(googleProvider);
     } catch (e) {
       if (e.code === 'auth/cancelled-popup-request') return;
@@ -187,7 +193,10 @@ ensureFirebase().then(async (ready) => {
     return;
   }
   try {
-    await firebaseApp.auth().getRedirectResult();
+    await Promise.race([
+      firebaseApp.auth().getRedirectResult(),
+      new Promise(resolve => setTimeout(resolve, 8000))
+    ]);
   } catch (e) {
     console.error('Google redirect sign-in failed', e);
     showAuthError(authFailureMessage(e));
@@ -622,6 +631,7 @@ document.getElementById('markUnavailable').onclick = async () => {
 const historyMonth = new Date();
 historyMonth.setDate(1);
 historyMonth.setHours(0, 0, 0, 0);
+let historyMonthPinned = false;
 
 function localDateStr(d) {
   const y = d.getFullYear();
@@ -636,6 +646,16 @@ function wearDay(wear) {
   if (typeof value === 'string') return value.slice(0, 10);
   if (typeof value.toDate === 'function') return localDateStr(value.toDate());
   return '';
+}
+
+function dateFromDay(day) {
+  const parts = String(day).split('-').map(n => parseInt(n, 10));
+  if (parts.length < 3 || parts.some(n => !n)) return null;
+  return new Date(parts[0], parts[1] - 1, parts[2]);
+}
+
+function latestWearDay() {
+  return state.wears.map(wearDay).filter(Boolean).sort().pop() || '';
 }
 
 function outfitOnDate(dateStr) {
@@ -681,7 +701,43 @@ function showHistoryDetail(dateStr, outfit) {
   document.getElementById('closeHistory').onclick = close;
 }
 
+function renderHistoryList(year, month) {
+  const list = document.getElementById('historyList');
+  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
+  const rows = state.wears
+    .map(wear => ({ wear, day: wearDay(wear) }))
+    .filter(row => row.day.startsWith(monthKey))
+    .sort((a, b) => b.day.localeCompare(a.day));
+  if (!rows.length) {
+    const latest = latestWearDay();
+    const latestDate = dateFromDay(latest);
+    const elsewhere = latestDate && (latestDate.getFullYear() !== year || latestDate.getMonth() !== month);
+    list.innerHTML = elsewhere
+      ? `<div class="no-outfit">Nothing logged in this month.</div><button class="btn history-jump" id="jumpLatest" type="button">Show latest logged day</button>`
+      : `<div class="no-outfit">No outfits have been logged yet.</div>`;
+    const jump = document.getElementById('jumpLatest');
+    if (jump) jump.onclick = () => {
+      historyMonth.setFullYear(latestDate.getFullYear(), latestDate.getMonth(), 1);
+      historyMonthPinned = true;
+      renderHistory();
+    };
+    return;
+  }
+  list.innerHTML = `<div class="history-list">${rows.map(({ day }) => {
+    const outfit = outfitOnDate(day);
+    const label = new Date(day + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
+    return `<div class="history-entry" data-date="${day}"><div class="when">${label}</div>${outfit ? `<div class="daily-pieces">${outfitImgs(outfit)}</div>` : ''}</div>`;
+  }).join('')}</div>`;
+  list.querySelectorAll('.history-entry').forEach(entry => {
+    entry.onclick = () => showHistoryDetail(entry.dataset.date, outfitOnDate(entry.dataset.date));
+  });
+}
+
 function renderHistory() {
+  if (!historyMonthPinned) {
+    const latest = dateFromDay(latestWearDay());
+    if (latest) historyMonth.setFullYear(latest.getFullYear(), latest.getMonth(), 1);
+  }
   const year = historyMonth.getFullYear();
   const month = historyMonth.getMonth();
   document.getElementById('calTitle').textContent = historyMonth.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
@@ -701,8 +757,9 @@ function renderHistory() {
   for (let d = new Date(gridStart); d <= gridEnd; d.setDate(d.getDate() + 1)) {
     const dateStr = localDateStr(d);
     const outfit = outfitOnDate(dateStr);
-    const cell = document.createElement('button');
-    cell.type = 'button';
+    const cell = document.createElement('div');
+    cell.setAttribute('role', 'button');
+    cell.tabIndex = 0;
     cell.dataset.date = dateStr;
     cell.className = 'cal-day'
       + (d.getMonth() === month ? '' : ' outside')
@@ -711,13 +768,16 @@ function renderHistory() {
     cell.onclick = () => showHistoryDetail(dateStr, outfit);
     grid.appendChild(cell);
   }
+  renderHistoryList(year, month);
 }
 
 document.getElementById('calPrev').onclick = () => {
+  historyMonthPinned = true;
   historyMonth.setMonth(historyMonth.getMonth() - 1);
   renderHistory();
 };
 document.getElementById('calNext').onclick = () => {
+  historyMonthPinned = true;
   historyMonth.setMonth(historyMonth.getMonth() + 1);
   renderHistory();
 };
@@ -756,4 +816,5 @@ function openPlanPickerForDate(dateStr) {
 function renderAll() {
   renderCloset();
   renderDaily();
+  renderHistory();
 }
