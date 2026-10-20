@@ -701,38 +701,6 @@ function showHistoryDetail(dateStr, outfit) {
   document.getElementById('closeHistory').onclick = close;
 }
 
-function renderHistoryList(year, month) {
-  const list = document.getElementById('historyList');
-  const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
-  const rows = state.wears
-    .map(wear => ({ wear, day: wearDay(wear) }))
-    .filter(row => row.day.startsWith(monthKey))
-    .sort((a, b) => b.day.localeCompare(a.day));
-  if (!rows.length) {
-    const latest = latestWearDay();
-    const latestDate = dateFromDay(latest);
-    const elsewhere = latestDate && (latestDate.getFullYear() !== year || latestDate.getMonth() !== month);
-    list.innerHTML = elsewhere
-      ? `<div class="no-outfit">Nothing logged in this month.</div><button class="btn history-jump" id="jumpLatest" type="button">Show latest logged day</button>`
-      : `<div class="no-outfit">No outfits have been logged yet.</div>`;
-    const jump = document.getElementById('jumpLatest');
-    if (jump) jump.onclick = () => {
-      historyMonth.setFullYear(latestDate.getFullYear(), latestDate.getMonth(), 1);
-      historyMonthPinned = true;
-      renderHistory();
-    };
-    return;
-  }
-  list.innerHTML = `<div class="history-list">${rows.map(({ day }) => {
-    const outfit = outfitOnDate(day);
-    const label = new Date(day + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' });
-    return `<div class="history-entry" data-date="${day}"><div class="when">${label}</div>${outfit ? `<div class="daily-pieces">${outfitImgs(outfit)}</div>` : ''}</div>`;
-  }).join('')}</div>`;
-  list.querySelectorAll('.history-entry').forEach(entry => {
-    entry.onclick = () => showHistoryDetail(entry.dataset.date, outfitOnDate(entry.dataset.date));
-  });
-}
-
 function renderHistory() {
   if (!historyMonthPinned) {
     const latest = dateFromDay(latestWearDay());
@@ -768,7 +736,6 @@ function renderHistory() {
     cell.onclick = () => showHistoryDetail(dateStr, outfit);
     grid.appendChild(cell);
   }
-  renderHistoryList(year, month);
 }
 
 document.getElementById('calPrev').onclick = () => {
