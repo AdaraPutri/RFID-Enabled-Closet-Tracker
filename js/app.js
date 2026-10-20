@@ -622,7 +622,6 @@ document.getElementById('markUnavailable').onclick = async () => {
 const historyMonth = new Date();
 historyMonth.setDate(1);
 historyMonth.setHours(0, 0, 0, 0);
-let selectedHistoryDate = null;
 
 function localDateStr(d) {
   const y = d.getFullYear();
@@ -636,24 +635,42 @@ function outfitOnDate(dateStr) {
   return wear ? state.outfits.find(o => o.id === wear.outfitId) : null;
 }
 
-function calendarThumb(outfit) {
-  const top = findItem(state.items, outfit.topId);
-  if (top && top.photo) return `<img src="${top.photo}" alt="">`;
-  const hijab = findItem(state.items, outfit.hijabId);
-  if (hijab && hijab.color) return `<span class="cal-swatch" style="background:${hijab.color}"></span>`;
-  return '';
+function outfitSlot(item, className, isHijab) {
+  if (isHijab) {
+    return `<span class="cal-hijab" style="background:${item && item.color ? item.color : '#ccc'}"></span>`;
+  }
+  if (item && item.photo) return `<img class="${className}" src="${item.photo}" alt="">`;
+  return `<span class="${className} cal-missing"></span>`;
+}
+
+function outfitLayout(outfit) {
+  return `<span class="cal-look">${
+    outfitSlot(findItem(state.items, outfit.hijabId), 'cal-hijab', true)
+  }${outfitSlot(findItem(state.items, outfit.topId), 'cal-top', false)
+  }${outfitSlot(findItem(state.items, outfit.bottomId), 'cal-bottom', false)
+  }${outfitSlot(findItem(state.items, outfit.shoesId), 'cal-shoes', false)
+  }</span>`;
 }
 
 function showHistoryDetail(dateStr, outfit) {
-  selectedHistoryDate = dateStr;
   const label = new Date(dateStr + 'T12:00:00').toLocaleDateString(undefined, { weekday: 'long', month: 'long', day: 'numeric' });
-  const detail = document.getElementById('historyDetail');
-  detail.innerHTML = outfit
-    ? `<div class="cal-detail-date">${label}</div><div class="daily-pieces">${outfitImgs(outfit)}</div>`
-    : `<div class="no-outfit">Nothing logged for ${label}.</div>`;
-  document.querySelectorAll('.cal-day').forEach(cell => {
-    cell.classList.toggle('selected', cell.dataset.date === dateStr);
-  });
+  const modalRoot = document.getElementById('modalRoot');
+  modalRoot.innerHTML = `
+    <div class="overlay" id="historyOverlay">
+      <div class="modal cal-popup">
+        <h3>${label}</h3>
+        ${outfit ? outfitLayout(outfit) : '<div class="no-outfit">Nothing logged for this day.</div>'}
+        <div class="modal-actions">
+          <button class="btn ghost" id="closeHistory" type="button">Close</button>
+        </div>
+      </div>
+    </div>
+  `;
+  const close = () => { modalRoot.innerHTML = ''; };
+  document.getElementById('historyOverlay').onclick = (e) => {
+    if (e.target.id === 'historyOverlay') close();
+  };
+  document.getElementById('closeHistory').onclick = close;
 }
 
 function renderHistory() {
@@ -681,9 +698,8 @@ function renderHistory() {
     cell.dataset.date = dateStr;
     cell.className = 'cal-day'
       + (d.getMonth() === month ? '' : ' outside')
-      + (dateStr === today ? ' today' : '')
-      + (dateStr === selectedHistoryDate ? ' selected' : '');
-    cell.innerHTML = `<span class="cal-num">${d.getDate()}</span>${outfit ? calendarThumb(outfit) : ''}`;
+      + (dateStr === today ? ' today' : '');
+    cell.innerHTML = `<span class="cal-num">${d.getDate()}</span>${outfit ? outfitLayout(outfit) : ''}`;
     cell.onclick = () => showHistoryDetail(dateStr, outfit);
     grid.appendChild(cell);
   }
