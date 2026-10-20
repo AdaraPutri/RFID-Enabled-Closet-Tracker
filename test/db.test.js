@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { recordsForDeletedItem, userCollectionPath } from '../js/db.js';
+import { recordsForDeletedItem, sameDayWearIds, userCollectionPath } from '../js/db.js';
 
 test('deleting a top drops only the pairings, outfits, and wears that use it', () => {
   const state = {
@@ -29,6 +29,15 @@ test('deleting a top drops only the pairings, outfits, and wears that use it', (
     outfitIds: ['o1'],
     wearIds: ['w1']
   });
+});
+
+test('choosing another outfit for a day replaces the earlier logs for that day', () => {
+  const wears = [
+    { id: 'w1', outfitId: 'early', date: '2026-10-19' },
+    { id: 'w2', outfitId: 'also-early', date: '2026-10-19' },
+    { id: 'w3', outfitId: 'other-day', date: '2026-10-18' }
+  ];
+  assert.deepEqual(sameDayWearIds(wears, '2026-10-19'), ['w1', 'w2']);
 });
 
 test('each account has its own closet path', () => {

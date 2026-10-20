@@ -105,9 +105,33 @@ export function extendQueueAfterApproval(state, step) {
   return extra;
 }
 
+function wearDayKey(wear) {
+  const value = wear && wear.date;
+  return typeof value === 'string' ? value.slice(0, 10) : '';
+}
+
+function wearIsLater(a, b) {
+  const aTime = typeof a.loggedAt === 'number' ? a.loggedAt : 0;
+  const bTime = typeof b.loggedAt === 'number' ? b.loggedAt : 0;
+  if (aTime !== bTime) return aTime > bTime;
+  return String(a.id) > String(b.id);
+}
+
+// One outfit per calendar day. A later "wear this" replaces the earlier choice.
+export function latestWearPerDay(wears) {
+  const byDay = new Map();
+  for (const wear of wears || []) {
+    const day = wearDayKey(wear);
+    if (!day) continue;
+    const current = byDay.get(day);
+    if (!current || wearIsLater(wear, current)) byDay.set(day, wear);
+  }
+  return [...byDay.values()];
+}
+
 export function wearsThisWeek(wears, date = new Date()) {
   const start = startOfWeek(date);
-  return wears.filter(w => new Date(w.date) >= start);
+  return latestWearPerDay(wears).filter(w => new Date(w.date) >= start);
 }
 
 export function outfitWornThisWeek(wears, outfitId, date = new Date()) {
@@ -125,7 +149,7 @@ export function pieceUsesThisWeek(state, itemId, date = new Date()) {
 }
 
 export function daysSinceWorn(state, itemId, now = new Date()) {
-  const wearsForItem = state.wears
+  const wearsForItem = latestWearPerDay(state.wears)
     .map(w => ({ ...w, outfit: state.outfits.find(o => o.id === w.outfitId) }))
     .filter(w => w.outfit && [w.outfit.topId, w.outfit.bottomId, w.outfit.hijabId, w.outfit.shoesId].includes(itemId));
   if (wearsForItem.length === 0) return 999; // never worn -> effectively no penalty

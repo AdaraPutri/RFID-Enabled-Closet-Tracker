@@ -100,6 +100,27 @@ test('rain, laundry, and a repeat this week drop an outfit', () => {
   assert.equal(candidateOutfits(base, false, NOW).length, 0);
 });
 
+test('a later outfit for the same day puts the earlier one back in the pool', () => {
+  const base = state({
+    items: [
+      ...closet(),
+      item({ id: 'b2', category: 'bottom', rainSavvy: true })
+    ],
+    outfits: [
+      outfit({ id: 'early' }),
+      outfit({ id: 'late', bottomId: 'b2' })
+    ],
+    wears: [
+      { id: 'w1', outfitId: 'early', date: '2026-09-30', loggedAt: 1 },
+      { id: 'w2', outfitId: 'late', date: '2026-09-30', loggedAt: 2 }
+    ]
+  });
+  const ids = candidateOutfits(base, false, NOW).map(o => o.id);
+  assert.equal(ids.includes('early'), true);
+  assert.equal(ids.includes('late'), false);
+  assert.equal(daysSinceWorn(base, 'b', NOW), 999);
+});
+
 test('a top worn twice this week is capped', () => {
   const capped = state({
     items: [

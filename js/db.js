@@ -58,9 +58,24 @@ export async function addOutfit(db, uid, state, topId, bottomId, hijabId, shoesI
   state.outfits.push({ id: ref.id, ...data });
 }
 
+export function sameDayWearIds(wears, date) {
+  const key = String(date || '').slice(0, 10);
+  return (wears || [])
+    .filter(w => typeof w.date === 'string' && w.date.slice(0, 10) === key)
+    .map(w => w.id);
+}
+
 export async function logWear(db, uid, state, outfitId, date) {
-  const data = { outfitId, date };
-  const ref = await col(db, uid, 'wears').add(data);
+  const key = String(date || '').slice(0, 10);
+  const previousIds = sameDayWearIds(state.wears, key);
+  const batch = db.batch();
+  for (const id of previousIds) batch.delete(col(db, uid, 'wears').doc(id));
+  const ref = col(db, uid, 'wears').doc();
+  const data = { outfitId, date: key, loggedAt: Date.now() };
+  batch.set(ref, data);
+  await batch.commit();
+  const removed = new Set(previousIds);
+  state.wears = state.wears.filter(w => !removed.has(w.id));
   state.wears.push({ id: ref.id, ...data });
 }
 

@@ -12,7 +12,8 @@ import {
   toDateStr,
   startOfWeek,
   outfitWornThisWeek,
-  getRankedCandidates
+  getRankedCandidates,
+  latestWearPerDay
 } from './algorithm.js';
 import { getSavedConfig } from './config.js';
 import {
@@ -659,7 +660,7 @@ function latestWearDay() {
 }
 
 function outfitOnDate(dateStr) {
-  const wear = state.wears.find(w => wearDay(w) === dateStr);
+  const wear = latestWearPerDay(state.wears).find(w => wearDay(w) === dateStr);
   return wear ? state.outfits.find(o => o.id === wear.outfitId) : null;
 }
 
